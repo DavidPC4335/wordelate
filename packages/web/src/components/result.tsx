@@ -12,7 +12,7 @@ export function Result({
   gaveUp: boolean;
   revealed: boolean;
   outOfMoves: boolean;
-  solution: string;
+  solution: string | null;
   onGiveUp: () => void;
   onShare: () => void;
   shareNote: string | null;
@@ -22,7 +22,8 @@ export function Result({
     <section class="result" aria-live="polite">
       {!won && outOfMoves ? <p class="result-note">No moves left.</p> : null}
       {gaveUp && !won ? <p class="result-note">Given up.</p> : null}
-      {showSolution ? <p class="solution">Known solution: {solution}</p> : null}
+      {showSolution && solution ? <p class="solution">Known solution: {solution}</p> : null}
+      {showSolution && !solution ? <p class="solution">No known solution for this pair.</p> : null}
       <div class="result-actions">
         {!won && !gaveUp ? (
           <button type="button" class="text-button" onClick={onGiveUp}>

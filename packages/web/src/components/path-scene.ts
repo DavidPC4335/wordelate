@@ -141,6 +141,9 @@ function viewDistance(span: number, aspect: number): number {
   return Math.max((bounds * 1.32) / Math.sin(half), 1e-3);
 }
 
+/** Closest the opening shot may come, as a fraction of the ordinary fit. */
+const OPENING_ZOOM = 0.36;
+
 function disposeMaterial(material: Mesh["material"]): void {
   if (Array.isArray(material)) {
     for (const item of material) item.dispose();
@@ -236,6 +239,8 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
   let cssWidth = 1;
   let cssHeight = 1;
   let labelRadius = 1e-4;
+  let goalRadius = 1e-4;
+  let framedPuzzle = "";
   let celebrated = false;
   let winMesh: Mesh | null = null;
   let winBase = 1;
@@ -313,28 +318,63 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
     return { ...center, radius: Math.max(10, Math.abs(edgeX - center.x)) };
   }
 
-  /** recentLabels[0] only, beside the latest point. Empty or "…" draws nothing. */
-  function drawLabels(state: PathDrawState): void {
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
-    context.setTransform(ratio, 0, 0, ratio, 0, 0);
-    context.clearRect(0, 0, cssWidth, cssHeight);
+  /**
+   * Equation centered over the latest point.
+   * Before any move there is no second line. After a move, the current word is drawn under the
+   * equation as "= queen", slightly smaller, and centered on the same point.
+   */
+  function drawLatestLabels(state: PathDrawState): void {
     const text = (state.recentLabels[0] ?? "").trim();
     if (text.length === 0 || text === "…") return;
     const latest = state.path[state.path.length - 1] ?? state.start;
     const head = pointScreen(latest, labelRadius);
     if (!head.visible) return;
+    const word = (state.recentLabels[1] ?? "").trim();
+    const showWord = word.length > 0 && word !== "…";
+    const second = showWord ? `= ${word}` : "";
     const size = fitSize(text, Math.min(36, cssWidth * 0.055), 14, 600);
-    const font = `600 ${size}px ${theme.serif}`;
     const color = state.arrived ? theme.ok : theme.ink;
-    const gap = head.radius + 8;
-    if (head.x < cssWidth * 0.62) {
-      paintText(text, head.x + gap, head.y, font, color, "middle", "left");
-    } else {
-      paintText(text, head.x - gap, head.y, font, color, "middle", "right");
+    const subSize = showWord ? fitSize(second, Math.max(13, Math.round(size * 0.82)), 12, 500) : 0;
+    const mainY = head.y - head.radius - 8 - (showWord ? subSize + 4 : 0);
+    paintText(text, head.x, mainY, `600 ${size}px ${theme.serif}`, color, "bottom", "center");
+    if (showWord) {
+      paintText(
+        second,
+        head.x,
+        head.y - head.radius - 6,
+        `500 ${subSize}px ${theme.serif}`,
+        theme.inkSoft,
+        "bottom",
+        "center",
+      );
     }
   }
 
-  function facingAngles(state: PathDrawState): { theta: number; phi: number } {
+  /** Goal word, small and light, sitting on the target. Skipped once the path has landed there. */
+  function drawGoalLabel(state: PathDrawState): void {
+    if (state.arrived) return;
+    const text = state.goalWord.trim();
+    if (text.length === 0) return;
+    const goal = pointScreen(state.goal, goalRadius);
+    if (!goal.visible) return;
+    const latest = state.path[state.path.length - 1] ?? state.start;
+    const head = pointScreen(latest, labelRadius);
+    const dx = goal.x - head.x;
+    const dy = goal.y - head.y;
+    if (head.visible && Math.hypot(dx, dy) < head.radius + goal.radius + 24) return;
+    const size = fitSize(text, Math.min(20, cssWidth * 0.032), 12, 500);
+    paintText(text, goal.x, goal.y, `500 ${size}px ${theme.serif}`, theme.inkSoft, "middle", "center");
+  }
+
+  function drawLabels(state: PathDrawState): void {
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    context.clearRect(0, 0, cssWidth, cssHeight);
+    drawGoalLabel(state);
+    drawLatestLabels(state);
+  }
+
+  function facingAngles(state: PathDrawState, open: boolean): { theta: number; phi: number } {
     const ax = state.goal[0] - state.start[0];
     const ay = state.goal[1] - state.start[1];
     const az = state.goal[2] - state.start[2];
@@ -375,11 +415,13 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
     nz /= length;
     let nextPhi = Math.acos(Math.min(1, Math.max(-1, ny)));
     const nextTheta = Math.atan2(nx, nz);
-    // Step off the face-on normal so nearer and farther points separate.
-    const tilt = 0.38;
+    // A small step off the face-on normal keeps nearer and farther points apart.
+    // The opening shot stays closer to that normal so the two endpoints read as opposite sides.
+    const tilt = open ? 0.16 : 0.38;
+    const yaw = open ? 0.12 : 0.42;
     nextPhi += nextPhi < Math.PI / 2 ? tilt : -tilt;
     return {
-      theta: nextTheta + 0.42,
+      theta: nextTheta + yaw,
       phi: Math.min(Math.PI - 0.34, Math.max(0.34, nextPhi)),
     };
   }
@@ -413,17 +455,72 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
     fill.target.updateMatrixWorld();
   }
 
+  function projected(point: Point3): { x: number; y: number; z: number } {
+    scratch.set(point[0], point[1], point[2]);
+    scratch.project(camera);
+    return { x: scratch.x * 0.5 + 0.5, y: -scratch.y * 0.5 + 0.5, z: scratch.z };
+  }
+
+  /** True when both endpoints stay inside the label padding at this camera distance. */
+  function endpointsFit(distance: number, cx: number, cy: number, cz: number, start: Point3, goal: Point3): boolean {
+    aimAt(cx, cy, cz, distance);
+    camera.near = Math.max(distance * 0.04, 1e-4);
+    camera.far = Math.max(distance * 14, 1);
+    camera.updateProjectionMatrix();
+    for (const point of [start, goal]) {
+      const placed = projected(point);
+      if (!Number.isFinite(placed.x) || !Number.isFinite(placed.y) || !Number.isFinite(placed.z)) return false;
+      if (placed.z <= -1 || placed.z >= 1) return false;
+      if (placed.x < 0.13 || placed.x > 0.87) return false;
+      if (placed.y < 0.17 || placed.y > 0.86) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Opening shot only. Pull the camera in until the start and goal sit toward
+   * opposite sides, stopping early so their labels still fit.
+   */
+  function openingDistance(
+    cx: number,
+    cy: number,
+    cz: number,
+    start: Point3,
+    goal: Point3,
+    fallback: number,
+  ): number {
+    const floor = Math.max(fallback * OPENING_ZOOM, 1e-3);
+    if (!endpointsFit(fallback, cx, cy, cz, start, goal)) return fallback;
+    let lo = floor;
+    let hi = fallback;
+    for (let i = 0; i < 14; i++) {
+      const mid = (lo + hi) / 2;
+      if (endpointsFit(mid, cx, cy, cz, start, goal)) hi = mid;
+      else lo = mid;
+    }
+    return hi;
+  }
+
   function frameView(state: PathDrawState): void {
+    const puzzleKey = `${state.startWord}\0${state.goalWord}`;
+    if (puzzleKey !== framedPuzzle) {
+      framedPuzzle = puzzleKey;
+      aimed = false;
+    }
     const cloud = cloudOf(state);
     const { cx, cy, cz, span } = measure(cloud);
     if (!aimed) {
-      const facing = facingAngles(state);
+      const facing = facingAngles(state, state.atStart);
       theta = facing.theta;
       phi = facing.phi;
     }
     const aspect = cssWidth / Math.max(cssHeight, 1);
     camera.aspect = aspect;
-    const distance = viewDistance(span, aspect);
+    camera.updateProjectionMatrix();
+    let distance = viewDistance(span, aspect);
+    // Opening shot only: start and goal sit toward opposite sides. Later moves
+    // use the ordinary fit. Dragging changes the angle and leaves this distance.
+    if (state.atStart) distance = openingDistance(cx, cy, cz, state.start, state.goal, distance);
     aimAt(cx, cy, cz, distance);
     camera.near = Math.max(distance * 0.04, 1e-4);
     camera.far = Math.max(distance * 14, span * 20);
@@ -437,6 +534,7 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
     grid.position.set(cx, cy - span * 1.15, cz);
     grid.scale.setScalar(span * 12);
     labelRadius = span * LATEST_SHARE;
+    goalRadius = span * GOAL_SHARE;
     placeLights(cx, cy, cz, span);
   }
 

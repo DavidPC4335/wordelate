@@ -1,4 +1,4 @@
-import { useRef, useState } from "preact/hooks";
+import { useState } from "preact/hooks";
 
 export type MoveOp = "add" | "subtract";
 
@@ -13,47 +13,34 @@ export function parseSignedEntry(raw: string, button: MoveOp): { op: MoveOp; wor
 }
 
 export function MoveForm({
-  suggestions,
   error,
   locked,
   busy,
   canUndo,
-  onQuery,
+  resolveWord,
   onAdd,
   onSubtract,
   onUndo,
 }: {
-  suggestions: readonly string[];
   error: string | null;
   locked: boolean;
   busy: boolean;
   canUndo: boolean;
-  onQuery: (value: string) => void;
+  resolveWord: (word: string) => string;
   onAdd: (word: string) => boolean;
   onSubtract: (word: string) => boolean;
   onUndo: () => void;
 }) {
   const [value, setValue] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
   const held = locked || busy;
-
-  function update(next: string) {
-    setValue(next);
-    onQuery(parseSignedEntry(next, "add").word);
-  }
 
   function submit(raw: string, button: MoveOp) {
     if (held) return;
     const { op, word } = parseSignedEntry(raw, button);
-    const ok = op === "add" ? onAdd(word) : onSubtract(word);
+    const resolved = word.length === 0 ? word : resolveWord(word);
+    const ok = op === "add" ? onAdd(resolved) : onSubtract(resolved);
     if (!ok) return;
     setValue("");
-    onQuery("");
-  }
-
-  function choose(word: string) {
-    update(word);
-    inputRef.current?.focus();
   }
 
   return (
@@ -76,7 +63,6 @@ export function MoveForm({
       <div class="entry">
         <input
           id="word"
-          ref={inputRef}
           class="word-input"
           value={value}
           disabled={locked}
@@ -86,10 +72,7 @@ export function MoveForm({
           spellcheck={false}
           enterkeyhint="done"
           placeholder="a vocabulary word"
-          aria-autocomplete="list"
-          aria-controls="suggestions"
-          aria-expanded={suggestions.length > 0 && !locked}
-          onInput={(event) => update(event.currentTarget.value)}
+          onInput={(event) => setValue(event.currentTarget.value)}
         />
         <button type="submit" class="op" aria-label="Add" disabled={held}>
           +
@@ -104,17 +87,6 @@ export function MoveForm({
           −
         </button>
       </div>
-      {suggestions.length > 0 && !locked ? (
-        <ul class="suggestions" id="suggestions" role="listbox" aria-label="Suggestions">
-          {suggestions.map((word) => (
-            <li key={word} role="presentation">
-              <button type="button" class="suggestion" role="option" onClick={() => choose(word)}>
-                {word}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
       {error ? (
         <p class="move-error" role="alert">
           {error}

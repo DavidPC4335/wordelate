@@ -95,6 +95,22 @@ export function parsePuzzleFile(data: unknown): Puzzle[] {
   return puzzles;
 }
 
+/** A free pair from Admin. There is no authored solution to reveal. */
+export function customPuzzle(start: string, goal: string): Puzzle {
+  const startWord = start.trim().toLowerCase();
+  const goalWord = goal.trim().toLowerCase();
+  return {
+    id: `custom-${startWord}-${goalWord}`,
+    start: startWord,
+    goal: goalWord,
+    par: 0,
+    solution: [],
+    solutionSimilarity: 0,
+    here: goalWord,
+    accepted: [],
+  };
+}
+
 /** Daily puzzles plus the extra complex set. Accepted words stay on each row. */
 export function mergePuzzles(main: unknown): Puzzle[] {
   if (!Array.isArray(main) || !Array.isArray(morePuzzles)) {

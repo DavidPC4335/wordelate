@@ -97,16 +97,6 @@ describe("puzzles", () => {
   it("lists the easy puzzles first, then the longer ones", () => {
     const puzzles = parsePuzzleFile(JSON.parse(readFileSync(puzzleFile, "utf8")));
     expect(puzzles.map((puzzle) => puzzle.id)).toEqual([
-      "king-queen",
-      "uncle-aunt",
-      "brother-sister",
-      "prince-princess",
-      "father-mother",
-      "boy-girl",
-      "man-woman",
-      "dog-puppy",
-      "cat-kitten",
-      "good-bad",
       "paris-sushi",
       "mother-son",
       "apple-wine",
@@ -114,9 +104,9 @@ describe("puzzles", () => {
       "beach-ski",
       "sun-snow",
     ]);
-    expect(puzzles.slice(10).every((puzzle) => puzzle.par >= 3)).toBe(true);
-    expect(puzzles[0]?.start).toBe("king");
-    expect(puzzles[0]?.goal).toBe("queen");
+    expect(puzzles.every((puzzle) => puzzle.par >= 3)).toBe(true);
+    expect(puzzles[0]?.start).toBe("paris");
+    expect(puzzles[0]?.goal).toBe("sushi");
   });
 });
 

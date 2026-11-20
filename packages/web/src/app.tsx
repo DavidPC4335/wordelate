@@ -9,6 +9,7 @@ import { Meter } from "./components/meter.js";
 import { MoveForm } from "./components/move-form.js";
 import { PathView } from "./components/path-view.js";
 import { Result } from "./components/result.js";
+import { Scores } from "./components/scores.js";
 import { StatusBar } from "./components/status-bar.js";
 import {
   MAX_MOVES,
@@ -23,11 +24,21 @@ import {
   LABEL_WARM_SIMILARITY,
   shareText,
 } from "./lib/game.js";
-import { loadPack, nearestLabels, rowFor, suggestWords } from "./lib/pack.js";
+import { closestWord, loadPack, nearestLabels, rowFor } from "./lib/pack.js";
 import type { Pack, PackProgress } from "./lib/pack.js";
-import { mergePuzzles } from "./lib/puzzles.js";
+import { customPuzzle, mergePuzzles } from "./lib/puzzles.js";
 import type { Puzzle } from "./lib/puzzles.js";
-import { getPlayerId, loadGame, saveGame } from "./lib/storage.js";
+import {
+  calendarDay,
+  getPlayerId,
+  loadGame,
+  readScores,
+  readStreak,
+  recordWin,
+  saveGame,
+  streakAsOf,
+} from "./lib/storage.js";
+import type { ScoreEntry, StreakState } from "./lib/storage.js";
 
 type PackState =
   | { status: "loading"; progress: PackProgress }
@@ -70,6 +81,7 @@ export function App() {
   const [puzzleError, setPuzzleError] = useState<string | null>(null);
   const [puzzles, setPuzzles] = useState<Puzzle[] | null>(null);
   const [puzzleId, setPuzzleId] = useState<string | null>(null);
+  const [custom, setCustom] = useState<Puzzle | null>(null);
   const [moves, setMoves] = useState<Move[]>([]);
   const [gaveUp, setGaveUp] = useState(false);
   const [revealed, setRevealed] = useState(false);
@@ -78,13 +90,17 @@ export function App() {
     () => new URLSearchParams(window.location.search).get("admin") === "1",
   );
   const [moveError, setMoveError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
   const [nearestHit, setNearestHit] = useState<NearestHit | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [formKey, setFormKey] = useState(0);
+  const [scoreLog, setScoreLog] = useState<ScoreEntry[]>(() => readScores());
+  const [streakState, setStreakState] = useState<StreakState>(() => readStreak());
   const scanGeneration = useRef(0);
   const shownProgress = useRef(0);
+  const openedSignature = useRef<string | null>(null);
+  const suppressLoadedWin = useRef(true);
+  const scoredSignature = useRef<string | null>(null);
 
   useEffect(() => {
     getPlayerId();
@@ -137,7 +153,8 @@ export function App() {
     };
   }, [loadAttempt]);
 
-  const puzzle = puzzles?.find((item) => item.id === puzzleId) ?? null;
+  const listed = puzzles?.find((item) => item.id === puzzleId) ?? null;
+  const puzzle = custom && custom.id === puzzleId ? custom : listed;
   const pack = packState.status === "ready" ? packState.pack : null;
 
   const played = useMemo(() => {
@@ -199,20 +216,68 @@ export function App() {
       });
   }, [pack, puzzle, played, moves]);
 
-  const suggestions = useMemo(() => {
-    if (!pack || !puzzle || !played || !played.ok) return [];
-    const used = new Set<string>([puzzle.start, puzzle.goal, ...played.equationWords]);
-    return suggestWords(pack, query, 8).filter((word) => !used.has(word));
-  }, [pack, puzzle, played, query]);
+  const hereKey = puzzle ? positionKey(puzzle.id, moves) : "";
+  const atStart = !played || !played.ok || played.equationWords.length === 0;
+  const pendingHere = Boolean(played && played.ok && !atStart && nearestHit?.key !== hereKey);
+  const scanned = !pendingHere && nearestHit?.key === hereKey ? nearestHit.words : [];
+  const hereWord =
+    played && played.ok && puzzle
+      ? hereAtPosition({
+          startWord: puzzle.start,
+          equationWords: played.equationWords,
+          nearest: scanned[0] ?? null,
+        })
+      : null;
+  const settledWord = pendingHere ? null : hereWord;
+  const won = Boolean(
+    played &&
+      played.ok &&
+      puzzle &&
+      countsAsWin({
+        similarity: played.similarity,
+        hereWord: settledWord,
+        goalWord: puzzle.goal,
+        movesUsed: played.equationWords.length,
+        acceptedWords: puzzle.accepted,
+      }),
+  );
+
+  useEffect(() => {
+    if (!hydrated || !puzzle) return;
+    const signature = positionKey(puzzle.id, moves);
+    if (openedSignature.current === null) openedSignature.current = signature;
+    // Give up writes nothing. A board that was already won when the page opened does not score again.
+    if (!played || !played.ok || !won || gaveUp) {
+      if (signature !== openedSignature.current) suppressLoadedWin.current = false;
+      scoredSignature.current = null;
+      return;
+    }
+    if (scoredSignature.current === signature) return;
+    if (suppressLoadedWin.current && signature === openedSignature.current) {
+      scoredSignature.current = signature;
+      return;
+    }
+    const movesUsed = played.equationWords.length;
+    if (movesUsed < 1) return;
+    scoredSignature.current = signature;
+    suppressLoadedWin.current = false;
+    const recorded = recordWin({
+      puzzleId: puzzle.id,
+      moves: movesUsed,
+      day: calendarDay(new Date()),
+    });
+    setScoreLog(recorded.scores);
+    setStreakState(recorded.streak);
+  }, [gaveUp, hydrated, moves, played, puzzle, won]);
 
   function selectPuzzle(id: string) {
+    setCustom(null);
     setPuzzleId(id);
     setMoves([]);
     setGaveUp(false);
     setRevealed(false);
     setMoveError(null);
     setShareNote(null);
-    setQuery("");
     setNearestHit(null);
     setFormKey((key) => key + 1);
     saveGame(id, { moves: [], gaveUp: false });
@@ -220,7 +285,43 @@ export function App() {
 
   function resetPuzzle() {
     if (!puzzle) return;
+    if (custom && custom.id === puzzle.id) {
+      setMoves([]);
+      setGaveUp(false);
+      setRevealed(false);
+      setMoveError(null);
+      setShareNote(null);
+      setNearestHit(null);
+      setFormKey((key) => key + 1);
+      saveGame(puzzle.id, { moves: [], gaveUp: false });
+      return;
+    }
     selectPuzzle(puzzle.id);
+  }
+
+  function playPair(startRaw: string, goalRaw: string): string | null {
+    if (!pack || !puzzles) return "Vocabulary is still loading.";
+    const start = closestWord(pack, startRaw);
+    const goal = closestWord(pack, goalRaw);
+    if (!start || !goal) return "Type a start word and a goal word from the vocabulary.";
+    const existing = puzzles.find((item) => item.start === start && item.goal === goal);
+    if (existing) {
+      selectPuzzle(existing.id);
+    } else {
+      const made = customPuzzle(start, goal);
+      setCustom(made);
+      setPuzzleId(made.id);
+      setMoves([]);
+      setGaveUp(false);
+      setRevealed(false);
+      setMoveError(null);
+      setShareNote(null);
+      setNearestHit(null);
+      setFormKey((key) => key + 1);
+      saveGame(made.id, { moves: [], gaveUp: false });
+    }
+    setAdminOpen(false);
+    return null;
   }
 
   function attempt(move: Move): boolean {
@@ -267,21 +368,27 @@ export function App() {
     }
   }
 
+  const streakCount = streakAsOf(streakState, calendarDay(new Date()));
+
   function layout(body: ComponentChildren, play = false) {
     return (
       <main class={play ? "page page-play" : "page"}>
         <header class="mast">
           <div class="masthead">
             <h1 class="title">Wordelate</h1>
-            <button
-              type="button"
-              class="admin-toggle"
-              aria-expanded={adminOpen}
-              aria-controls="admin-panel"
-              onClick={() => setAdminOpen((open) => !open)}
-            >
-              Admin
-            </button>
+            <div class="mast-tools">
+              {streakCount > 0 ? <p class="streak">{streakCount} day streak</p> : null}
+              <Scores entries={scoreLog} />
+              <button
+                type="button"
+                class="admin-toggle"
+                aria-expanded={adminOpen}
+                aria-controls="admin-panel"
+                onClick={() => setAdminOpen((open) => !open)}
+              >
+                Admin
+              </button>
+            </div>
           </div>
           <Admin
             open={adminOpen}
@@ -291,6 +398,7 @@ export function App() {
             onReset={resetPuzzle}
             onReveal={() => setRevealed(true)}
             onHide={() => setRevealed(false)}
+            onPlay={playPair}
           />
         </header>
         {body}
@@ -341,23 +449,6 @@ export function App() {
     );
   }
 
-  const hereKey = positionKey(puzzle.id, moves);
-  const atStart = played.equationWords.length === 0;
-  const pendingHere = !atStart && nearestHit?.key !== hereKey;
-  const scanned = !pendingHere && nearestHit?.key === hereKey ? nearestHit.words : [];
-  const hereWord = hereAtPosition({
-    startWord: puzzle.start,
-    equationWords: played.equationWords,
-    nearest: scanned[0] ?? null,
-  });
-  const settledWord = pendingHere ? null : hereWord;
-  const won = countsAsWin({
-    similarity: played.similarity,
-    hereWord: settledWord,
-    goalWord: puzzle.goal,
-    movesUsed: played.equationWords.length,
-    acceptedWords: puzzle.accepted,
-  });
   const steps = appliedSteps(moves);
   const startRow = rowFor(packState.pack, puzzle.start);
   const goalRow = rowFor(packState.pack, puzzle.goal);
@@ -367,7 +458,7 @@ export function App() {
     won,
   });
   shownProgress.current = progress;
-  const solution = formatEquation(puzzle.start, puzzle.solution);
+  const solution = puzzle.solution.length > 0 ? formatEquation(puzzle.start, puzzle.solution) : null;
   const locked = won || gaveUp || played.movesUsed >= MAX_MOVES;
 
   return layout(
@@ -397,17 +488,20 @@ export function App() {
       <div class="dock">
         <div class="dock-meta">
           <Equation start={puzzle.start} steps={steps} />
-          <StatusBar movesUsed={played.movesUsed} maxMoves={MAX_MOVES} par={puzzle.par} />
+          <StatusBar
+            movesUsed={played.movesUsed}
+            maxMoves={MAX_MOVES}
+            par={puzzle.par > 0 ? puzzle.par : null}
+          />
         </div>
         <Meter progress={progress} won={won} />
         <MoveForm
           key={formKey}
-          suggestions={suggestions}
           error={moveError}
           locked={locked}
           busy={pendingHere && !won}
           canUndo={played.equationWords.length > 0}
-          onQuery={setQuery}
+          resolveWord={(word) => closestWord(packState.pack, word) ?? word}
           onAdd={(word) => attempt({ op: "+", word })}
           onSubtract={(word) => attempt({ op: "-", word })}
           onUndo={() => {

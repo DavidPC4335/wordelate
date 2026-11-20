@@ -1,13 +1,17 @@
+import { isVariant } from "@wordelate/game-math";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { formatEquation, type AppliedStep } from "../lib/game.js";
+import { LABEL_NEAR_DUPLICATE_CUTOFF, LABEL_WARM_SIMILARITY } from "../lib/game.js";
 import { equationPositions, type PathDrawState } from "../lib/path.js";
-import { rowFor, type Pack } from "../lib/pack.js";
+import { nearestLabels, rowFor, type Pack } from "../lib/pack.js";
 import { projectTo3 } from "../lib/project.js";
 
 type PathSceneHandle = {
   update(state: PathDrawState): void;
   dispose(): void;
 };
+
+type ScanHit = { key: string; word: string };
 
 function stepKeyOf(steps: readonly AppliedStep[]): string {
   let key = "";
@@ -27,7 +31,10 @@ function pathCaption(
   }
   caption += ` toward ${goalWord}`;
   const words = recentLabels.filter((word) => word.length > 0);
-  if (words.length > 0) caption += `. Here: ${words.join(", ")}`;
+  const equation = words[0];
+  const current = words[1];
+  if (equation && current) caption += `. Here: ${equation}, = ${current}`;
+  else if (equation) caption += `. Here: ${equation}`;
   return caption;
 }
 
@@ -64,6 +71,7 @@ export function PathView({
   goalWord,
   steps,
   position,
+  similarity,
   won,
 }: {
   pack: Pack;
@@ -78,15 +86,26 @@ export function PathView({
 }) {
   const [failed, setFailed] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
+  const [scan, setScan] = useState<ScanHit | null>(null);
   const glRef = useRef<HTMLCanvasElement>(null);
   const labelRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<PathSceneHandle | null>(null);
   const drawRef = useRef<PathDrawState | null>(null);
+  const stepsRef = useRef(steps);
+  stepsRef.current = steps;
 
   const stepKey = stepKeyOf(steps);
   const atStart = stepKey.length === 0;
   const equationLabel = formatEquation(startWord, steps);
-  const recentLabels = useMemo(() => [equationLabel], [equationLabel]);
+  const scannedWord = !atStart && !won && scan?.key === stepKey ? scan.word : "";
+  const recentLabels = useMemo(() => {
+    if (atStart) return [equationLabel];
+    const second = (won ? goalWord : scannedWord).trim();
+    if (second.length === 0 || second.toLowerCase() === equationLabel.trim().toLowerCase()) {
+      return [equationLabel];
+    }
+    return [equationLabel, second];
+  }, [atStart, equationLabel, goalWord, scannedWord, won]);
 
   const drawState = useMemo<PathDrawState>(() => {
     const samples = equationPositions({
@@ -150,6 +169,38 @@ export function PathView({
   useEffect(() => {
     sceneRef.current?.update(drawState);
   }, [drawState]);
+
+  useEffect(() => {
+    if (atStart || won) return;
+    let cancel = false;
+    const anchors = [{ word: startWord, vector: start }];
+    for (const step of stepsRef.current) {
+      const vector = rowFor(pack, step.word);
+      if (vector) anchors.push({ word: step.word, vector });
+    }
+    const key = stepKey;
+    nearestLabels(
+      pack,
+      position,
+      anchors,
+      goalWord,
+      LABEL_NEAR_DUPLICATE_CUTOFF,
+      similarity,
+      LABEL_WARM_SIMILARITY,
+    )
+      .then((words) => {
+        if (cancel) return;
+        const raw = words[0]?.trim() ?? "";
+        const word = raw.length === 0 ? "" : isVariant(raw, goalWord) ? goalWord : raw;
+        setScan({ key, word });
+      })
+      .catch(() => {
+        if (!cancel) setScan({ key, word: "" });
+      });
+    return () => {
+      cancel = true;
+    };
+  }, [atStart, goalWord, pack, position, similarity, start, startWord, stepKey, won]);
 
   useEffect(() => {
     if (!won) {

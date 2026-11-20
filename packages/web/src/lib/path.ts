@@ -8,7 +8,11 @@ export type PathDrawState = {
   startWord: string;
   goalWord: string;
   path: readonly Point3[];
-  /** First entry is the large word on the latest point. */
+  /**
+   * Labels drawn on the latest point.
+   * [0] is the equation, or the start word before any move.
+   * [1], when present, is the current nearest word under that line.
+   */
   recentLabels: readonly string[];
   /** Latest point is the start vector, so that word is the large label. */
   atStart: boolean;

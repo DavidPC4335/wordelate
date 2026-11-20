@@ -77,6 +77,101 @@ export function suggestWords(pack: Pack, prefix: string, limit = 8): string[] {
   return out;
 }
 
+const LENGTH_WINDOW = 2;
+
+/**
+ * Closest vocabulary spelling to `typed`.
+ *
+ * An exact pack word is returned unchanged. Otherwise only words within two
+ * characters of the typed length are considered. The winner is the lowest
+ * Levenshtein distance, then the longer shared prefix, then the shorter word.
+ * Returns null when `typed` is empty or nothing falls in that length window.
+ */
+export function closestWord(pack: Pack, typed: string): string | null {
+  const needle = typed.trim().toLowerCase();
+  if (needle.length === 0) return null;
+  const exact = pack.index.get(needle);
+  if (exact !== undefined) return pack.words[exact] ?? needle;
+
+  const minLen = Math.max(0, needle.length - LENGTH_WINDOW);
+  const maxLen = needle.length + LENGTH_WINDOW;
+  let best: string | null = null;
+  let bestDist = Number.POSITIVE_INFINITY;
+  let bestPrefix = -1;
+
+  for (let i = 0; i < pack.words.length; i++) {
+    const word = pack.words[i];
+    if (word === undefined) continue;
+    const len = word.length;
+    if (len < minLen || len > maxLen) continue;
+    const gap = len > needle.length ? len - needle.length : needle.length - len;
+    if (gap > bestDist) continue;
+    const cutoff = Number.isFinite(bestDist) ? bestDist : needle.length + LENGTH_WINDOW;
+    const dist = levenshteinAtMost(needle, word, cutoff);
+    if (dist > bestDist) continue;
+    const prefix = sharedPrefixLength(needle, word);
+    if (
+      dist < bestDist ||
+      (dist === bestDist &&
+        (prefix > bestPrefix || (prefix === bestPrefix && (best === null || word.length < best.length))))
+    ) {
+      best = word;
+      bestDist = dist;
+      bestPrefix = prefix;
+    }
+  }
+  return best;
+}
+
+function sharedPrefixLength(a: string, b: string): number {
+  const limit = a.length < b.length ? a.length : b.length;
+  let i = 0;
+  while (i < limit && a.charCodeAt(i) === b.charCodeAt(i)) i++;
+  return i;
+}
+
+let levenshteinPrev = new Uint16Array(16);
+let levenshteinCurr = new Uint16Array(16);
+
+/** Distance, or `limit + 1` when the distance is greater than `limit`. */
+function levenshteinAtMost(a: string, b: string, limit: number): number {
+  const aLen = a.length;
+  const bLen = b.length;
+  if (aLen === 0) return bLen > limit ? limit + 1 : bLen;
+  if (bLen === 0) return aLen > limit ? limit + 1 : aLen;
+  const gap = aLen > bLen ? aLen - bLen : bLen - aLen;
+  if (gap > limit) return limit + 1;
+
+  if (levenshteinPrev.length < bLen + 1) {
+    let size = levenshteinPrev.length;
+    while (size < bLen + 1) size *= 2;
+    levenshteinPrev = new Uint16Array(size);
+    levenshteinCurr = new Uint16Array(size);
+  }
+  const prev = levenshteinPrev;
+  const curr = levenshteinCurr;
+  for (let j = 0; j <= bLen; j++) prev[j] = j;
+
+  for (let i = 1; i <= aLen; i++) {
+    curr[0] = i;
+    let rowMin = i > limit ? limit + 1 : i;
+    const ca = a.charCodeAt(i - 1);
+    for (let j = 1; j <= bLen; j++) {
+      const cost = ca === b.charCodeAt(j - 1) ? 0 : 1;
+      const del = prev[j]! + 1;
+      const ins = curr[j - 1]! + 1;
+      const sub = prev[j - 1]! + cost;
+      const val = del < ins ? (del < sub ? del : sub) : ins < sub ? ins : sub;
+      curr[j] = val;
+      if (val < rowMin) rowMin = val;
+    }
+    if (rowMin > limit) return limit + 1;
+    for (let j = 0; j <= bLen; j++) prev[j] = curr[j]!;
+  }
+  const dist = prev[bLen] ?? limit + 1;
+  return dist > limit ? limit + 1 : dist;
+}
+
 /**
  * Nearest vocab word by cosine to `position`.
  * Excludes the start word and operands still on the equation. The goal may win.

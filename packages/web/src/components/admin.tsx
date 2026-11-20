@@ -1,3 +1,4 @@
+import { useState } from "preact/hooks";
 import { countsAsWin, formatEquation, formatPercent } from "../lib/game.js";
 import type { Puzzle } from "../lib/puzzles.js";
 
@@ -9,6 +10,7 @@ export function Admin({
   onReset,
   onReveal,
   onHide,
+  onPlay,
 }: {
   open: boolean;
   puzzles: readonly Puzzle[];
@@ -17,10 +19,54 @@ export function Admin({
   onReset: () => void;
   onReveal: () => void;
   onHide: () => void;
+  /** Returns an error message, or null when the pair starts. */
+  onPlay: (start: string, goal: string) => string | null;
 }) {
+  const [start, setStart] = useState("");
+  const [goal, setGoal] = useState("");
+  const [error, setError] = useState<string | null>(null);
   if (!open) return null;
+
+  function play(event: Event) {
+    event.preventDefault();
+    const message = onPlay(start, goal);
+    setError(message);
+    if (message === null) {
+      setStart("");
+      setGoal("");
+    }
+  }
+
   return (
     <div id="admin-panel" class="admin-panel">
+      <form class="custom-play" onSubmit={play}>
+        <label>
+          Start
+          <input
+            value={start}
+            autoCapitalize="none"
+            autoComplete="off"
+            autoCorrect="off"
+            spellcheck={false}
+            onInput={(event) => setStart(event.currentTarget.value)}
+          />
+        </label>
+        <label>
+          Goal
+          <input
+            value={goal}
+            autoCapitalize="none"
+            autoComplete="off"
+            autoCorrect="off"
+            spellcheck={false}
+            onInput={(event) => setGoal(event.currentTarget.value)}
+          />
+        </label>
+        <button type="submit" class="text-button text-button-strong">
+          Play
+        </button>
+        {error ? <p class="move-error">{error}</p> : null}
+      </form>
       <div class="admin-actions">
         <button type="button" class="text-button" onClick={onReset}>
           Reset puzzle

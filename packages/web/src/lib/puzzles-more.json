@@ -268,5 +268,1332 @@
     ],
     "solutionSimilarity": 0.5259,
     "here": "flower"
+  },
+  {
+    "id": "berlin-sushi",
+    "start": "berlin",
+    "goal": "sushi",
+    "accepted": [
+      "seafood",
+      "tuna"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "germany"
+      },
+      {
+        "op": "+",
+        "word": "food"
+      },
+      {
+        "op": "+",
+        "word": "japanese"
+      }
+    ],
+    "solutionSimilarity": 0.6179,
+    "here": "sushi"
+  },
+  {
+    "id": "london-sushi",
+    "start": "london",
+    "goal": "sushi",
+    "accepted": [
+      "seafood",
+      "tuna"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "british"
+      },
+      {
+        "op": "+",
+        "word": "food"
+      },
+      {
+        "op": "+",
+        "word": "japanese"
+      }
+    ],
+    "solutionSimilarity": 0.6638,
+    "here": "sushi"
+  },
+  {
+    "id": "chicken-sushi",
+    "start": "chicken",
+    "goal": "sushi",
+    "accepted": [
+      "seafood",
+      "tuna"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "poultry"
+      },
+      {
+        "op": "+",
+        "word": "food"
+      },
+      {
+        "op": "+",
+        "word": "japan"
+      }
+    ],
+    "solutionSimilarity": 0.6935,
+    "here": "sushi"
+  },
+  {
+    "id": "munich-ramen",
+    "start": "munich",
+    "goal": "ramen",
+    "accepted": [
+      "sushi",
+      "pasta"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "germany"
+      },
+      {
+        "op": "+",
+        "word": "soup"
+      },
+      {
+        "op": "+",
+        "word": "japan"
+      }
+    ],
+    "solutionSimilarity": 0.647,
+    "here": "ramen"
+  },
+  {
+    "id": "bangkok-ramen",
+    "start": "bangkok",
+    "goal": "ramen",
+    "accepted": [
+      "sushi",
+      "pasta"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "thailand"
+      },
+      {
+        "op": "+",
+        "word": "soup"
+      },
+      {
+        "op": "+",
+        "word": "japan"
+      }
+    ],
+    "solutionSimilarity": 0.6264,
+    "here": "ramen"
+  },
+  {
+    "id": "lisbon-baguette",
+    "start": "lisbon",
+    "goal": "baguette",
+    "accepted": [
+      "loaf",
+      "bun"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "portugal"
+      },
+      {
+        "op": "+",
+        "word": "bread"
+      },
+      {
+        "op": "+",
+        "word": "france"
+      }
+    ],
+    "solutionSimilarity": 0.5724,
+    "here": "baguette"
+  },
+  {
+    "id": "milan-baguette",
+    "start": "milan",
+    "goal": "baguette",
+    "accepted": [
+      "loaf",
+      "bun"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "italian"
+      },
+      {
+        "op": "+",
+        "word": "bread"
+      },
+      {
+        "op": "+",
+        "word": "french"
+      }
+    ],
+    "solutionSimilarity": 0.576,
+    "here": "baguette"
+  },
+  {
+    "id": "berlin-baguette",
+    "start": "berlin",
+    "goal": "baguette",
+    "accepted": [
+      "loaf",
+      "bun",
+      "pastry"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "german"
+      },
+      {
+        "op": "+",
+        "word": "bread"
+      },
+      {
+        "op": "+",
+        "word": "french"
+      }
+    ],
+    "solutionSimilarity": 0.6316,
+    "here": "baguette"
+  },
+  {
+    "id": "osaka-croissant",
+    "start": "osaka",
+    "goal": "croissant",
+    "accepted": [
+      "pastry",
+      "biscuit",
+      "bun"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "japanese"
+      },
+      {
+        "op": "+",
+        "word": "bread"
+      },
+      {
+        "op": "+",
+        "word": "french"
+      }
+    ],
+    "solutionSimilarity": 0.5924,
+    "here": "croissant"
+  },
+  {
+    "id": "beijing-taco",
+    "start": "beijing",
+    "goal": "taco",
+    "accepted": [
+      "chili",
+      "salsa"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "chinese"
+      },
+      {
+        "op": "+",
+        "word": "mexican"
+      },
+      {
+        "op": "+",
+        "word": "food"
+      }
+    ],
+    "solutionSimilarity": 0.5807,
+    "here": "taco"
+  },
+  {
+    "id": "athens-taco",
+    "start": "athens",
+    "goal": "taco",
+    "accepted": [
+      "chili",
+      "salsa"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "greece"
+      },
+      {
+        "op": "+",
+        "word": "mexican"
+      },
+      {
+        "op": "+",
+        "word": "food"
+      }
+    ],
+    "solutionSimilarity": 0.5892,
+    "here": "taco"
+  },
+  {
+    "id": "beijing-burrito",
+    "start": "beijing",
+    "goal": "burrito",
+    "accepted": [
+      "chili",
+      "salsa"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "china"
+      },
+      {
+        "op": "+",
+        "word": "mexican"
+      },
+      {
+        "op": "+",
+        "word": "bean"
+      }
+    ],
+    "solutionSimilarity": 0.615,
+    "here": "burrito"
+  },
+  {
+    "id": "osaka-burrito",
+    "start": "osaka",
+    "goal": "burrito",
+    "accepted": [
+      "chili",
+      "salsa"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "japan"
+      },
+      {
+        "op": "+",
+        "word": "mexican"
+      },
+      {
+        "op": "+",
+        "word": "bean"
+      }
+    ],
+    "solutionSimilarity": 0.6145,
+    "here": "burrito"
+  },
+  {
+    "id": "berlin-pasta",
+    "start": "berlin",
+    "goal": "pasta",
+    "accepted": [
+      "spaghetti",
+      "noodles",
+      "sauce"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "german"
+      },
+      {
+        "op": "+",
+        "word": "tomato"
+      },
+      {
+        "op": "+",
+        "word": "italian"
+      }
+    ],
+    "solutionSimilarity": 0.576,
+    "here": "pasta"
+  },
+  {
+    "id": "orange-wine",
+    "start": "orange",
+    "goal": "wine",
+    "accepted": [
+      "champagne",
+      "brandy",
+      "burgundy"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "citrus"
+      },
+      {
+        "op": "+",
+        "word": "grape"
+      },
+      {
+        "op": "+",
+        "word": "drink"
+      }
+    ],
+    "solutionSimilarity": 0.6566,
+    "here": "wine"
+  },
+  {
+    "id": "orchard-wine",
+    "start": "orchard",
+    "goal": "wine",
+    "accepted": [
+      "champagne",
+      "brandy",
+      "burgundy"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "tree"
+      },
+      {
+        "op": "+",
+        "word": "grape"
+      },
+      {
+        "op": "+",
+        "word": "drink"
+      }
+    ],
+    "solutionSimilarity": 0.6474,
+    "here": "wine"
+  },
+  {
+    "id": "oat-wine",
+    "start": "oat",
+    "goal": "wine",
+    "accepted": [
+      "champagne",
+      "brandy",
+      "burgundy"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "cereal"
+      },
+      {
+        "op": "+",
+        "word": "grape"
+      },
+      {
+        "op": "+",
+        "word": "drink"
+      }
+    ],
+    "solutionSimilarity": 0.6562,
+    "here": "wine"
+  },
+  {
+    "id": "lemon-beer",
+    "start": "lemon",
+    "goal": "beer",
+    "accepted": [
+      "brewery",
+      "guinness",
+      "pint"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "citrus"
+      },
+      {
+        "op": "+",
+        "word": "drink"
+      },
+      {
+        "op": "+",
+        "word": "malt"
+      }
+    ],
+    "solutionSimilarity": 0.6932,
+    "here": "beer"
+  },
+  {
+    "id": "vineyard-beer",
+    "start": "vineyard",
+    "goal": "beer",
+    "accepted": [
+      "ale",
+      "brewery",
+      "guinness"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "vine"
+      },
+      {
+        "op": "+",
+        "word": "drink"
+      },
+      {
+        "op": "+",
+        "word": "barley"
+      }
+    ],
+    "solutionSimilarity": 0.6194,
+    "here": "beer"
+  },
+  {
+    "id": "honey-champagne",
+    "start": "honey",
+    "goal": "champagne",
+    "accepted": [
+      "sparkling",
+      "burgundy"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "bee"
+      },
+      {
+        "op": "+",
+        "word": "wine"
+      },
+      {
+        "op": "+",
+        "word": "bubble"
+      }
+    ],
+    "solutionSimilarity": 0.5938,
+    "here": "champagne"
+  },
+  {
+    "id": "peach-champagne",
+    "start": "peach",
+    "goal": "champagne",
+    "accepted": [
+      "sparkling",
+      "brandy"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "fruit"
+      },
+      {
+        "op": "+",
+        "word": "wine"
+      },
+      {
+        "op": "+",
+        "word": "bubble"
+      }
+    ],
+    "solutionSimilarity": 0.55,
+    "here": "champagne"
+  },
+  {
+    "id": "coffee-tequila",
+    "start": "coffee",
+    "goal": "tequila",
+    "accepted": [
+      "vodka",
+      "rum",
+      "whiskey"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "cafe"
+      },
+      {
+        "op": "+",
+        "word": "mexico"
+      },
+      {
+        "op": "+",
+        "word": "alcohol"
+      }
+    ],
+    "solutionSimilarity": 0.5751,
+    "here": "tequila"
+  },
+  {
+    "id": "honey-whiskey",
+    "start": "honey",
+    "goal": "whiskey",
+    "accepted": [
+      "whisky",
+      "bourbon",
+      "scotch"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "bee"
+      },
+      {
+        "op": "+",
+        "word": "alcohol"
+      },
+      {
+        "op": "+",
+        "word": "barrel"
+      }
+    ],
+    "solutionSimilarity": 0.605,
+    "here": "whiskey"
+  },
+  {
+    "id": "rye-rum",
+    "start": "rye",
+    "goal": "rum",
+    "accepted": [
+      "whiskey",
+      "bourbon",
+      "brandy"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "grain"
+      },
+      {
+        "op": "+",
+        "word": "alcohol"
+      },
+      {
+        "op": "+",
+        "word": "sugar"
+      }
+    ],
+    "solutionSimilarity": 0.5866,
+    "here": "rum"
+  },
+  {
+    "id": "lemon-scotch",
+    "start": "lemon",
+    "goal": "scotch",
+    "accepted": [
+      "whisky",
+      "whiskey",
+      "bourbon"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "fruit"
+      },
+      {
+        "op": "+",
+        "word": "drink"
+      },
+      {
+        "op": "+",
+        "word": "scotland"
+      }
+    ],
+    "solutionSimilarity": 0.5747,
+    "here": "scotch"
+  },
+  {
+    "id": "oat-juice",
+    "start": "oat",
+    "goal": "juice",
+    "accepted": [
+      "oranges",
+      "pineapple"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "grain"
+      },
+      {
+        "op": "+",
+        "word": "fruit"
+      },
+      {
+        "op": "+",
+        "word": "drink"
+      }
+    ],
+    "solutionSimilarity": 0.6308,
+    "here": "juice"
+  },
+  {
+    "id": "chocolate-juice",
+    "start": "chocolate",
+    "goal": "juice",
+    "accepted": [
+      "lemonade",
+      "oranges",
+      "pineapple"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "cocoa"
+      },
+      {
+        "op": "+",
+        "word": "fruit"
+      },
+      {
+        "op": "+",
+        "word": "drink"
+      }
+    ],
+    "solutionSimilarity": 0.5891,
+    "here": "juice"
+  },
+  {
+    "id": "harbor-surf",
+    "start": "harbor",
+    "goal": "surf",
+    "accepted": [
+      "seaside",
+      "ocean"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "port"
+      },
+      {
+        "op": "+",
+        "word": "beach"
+      },
+      {
+        "op": "+",
+        "word": "wave"
+      }
+    ],
+    "solutionSimilarity": 0.6287,
+    "here": "surf"
+  },
+  {
+    "id": "ice-surf",
+    "start": "ice",
+    "goal": "surf",
+    "accepted": [
+      "beach",
+      "seaside"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "frozen"
+      },
+      {
+        "op": "+",
+        "word": "wave"
+      },
+      {
+        "op": "+",
+        "word": "ocean"
+      }
+    ],
+    "solutionSimilarity": 0.5818,
+    "here": "surf"
+  },
+  {
+    "id": "valley-surf",
+    "start": "valley",
+    "goal": "surf",
+    "accepted": [
+      "seaside",
+      "ocean"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "hill"
+      },
+      {
+        "op": "+",
+        "word": "beach"
+      },
+      {
+        "op": "+",
+        "word": "wave"
+      }
+    ],
+    "solutionSimilarity": 0.5741,
+    "here": "surf"
+  },
+  {
+    "id": "ocean-ski",
+    "start": "ocean",
+    "goal": "ski",
+    "accepted": [
+      "downhill",
+      "slopes"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "sea"
+      },
+      {
+        "op": "+",
+        "word": "alpine"
+      },
+      {
+        "op": "+",
+        "word": "snow"
+      }
+    ],
+    "solutionSimilarity": 0.6374,
+    "here": "ski"
+  },
+  {
+    "id": "volcano-ski",
+    "start": "volcano",
+    "goal": "ski",
+    "accepted": [
+      "downhill",
+      "slopes"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "lava"
+      },
+      {
+        "op": "+",
+        "word": "alpine"
+      },
+      {
+        "op": "+",
+        "word": "snow"
+      }
+    ],
+    "solutionSimilarity": 0.6444,
+    "here": "ski"
+  },
+  {
+    "id": "canyon-ski",
+    "start": "canyon",
+    "goal": "ski",
+    "accepted": [
+      "downhill",
+      "slopes"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "desert"
+      },
+      {
+        "op": "+",
+        "word": "alpine"
+      },
+      {
+        "op": "+",
+        "word": "snow"
+      }
+    ],
+    "solutionSimilarity": 0.6351,
+    "here": "ski"
+  },
+  {
+    "id": "valley-beach",
+    "start": "valley",
+    "goal": "beach",
+    "accepted": [
+      "seaside",
+      "shore",
+      "sand"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "river"
+      },
+      {
+        "op": "+",
+        "word": "coast"
+      },
+      {
+        "op": "+",
+        "word": "ocean"
+      }
+    ],
+    "solutionSimilarity": 0.6261,
+    "here": "beach"
+  },
+  {
+    "id": "glacier-beach",
+    "start": "glacier",
+    "goal": "beach",
+    "accepted": [
+      "seaside",
+      "shore",
+      "sand"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "ice"
+      },
+      {
+        "op": "+",
+        "word": "coast"
+      },
+      {
+        "op": "+",
+        "word": "ocean"
+      }
+    ],
+    "solutionSimilarity": 0.611,
+    "here": "beach"
+  },
+  {
+    "id": "river-sail",
+    "start": "river",
+    "goal": "sail",
+    "accepted": [
+      "yacht",
+      "ship",
+      "sailor"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "water"
+      },
+      {
+        "op": "+",
+        "word": "boat"
+      },
+      {
+        "op": "+",
+        "word": "ocean"
+      }
+    ],
+    "solutionSimilarity": 0.5975,
+    "here": "sail"
+  },
+  {
+    "id": "train-sail",
+    "start": "train",
+    "goal": "sail",
+    "accepted": [
+      "yacht",
+      "nautical",
+      "sailor"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "rail"
+      },
+      {
+        "op": "+",
+        "word": "boat"
+      },
+      {
+        "op": "+",
+        "word": "ocean"
+      }
+    ],
+    "solutionSimilarity": 0.6208,
+    "here": "sail"
+  },
+  {
+    "id": "canyon-sail",
+    "start": "canyon",
+    "goal": "sail",
+    "accepted": [
+      "yacht",
+      "ship",
+      "sailor"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "cliff"
+      },
+      {
+        "op": "+",
+        "word": "boat"
+      },
+      {
+        "op": "+",
+        "word": "ocean"
+      }
+    ],
+    "solutionSimilarity": 0.5673,
+    "here": "sail"
+  },
+  {
+    "id": "city-hike",
+    "start": "city",
+    "goal": "hike",
+    "accepted": [
+      "hiking",
+      "trek",
+      "climb"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "building"
+      },
+      {
+        "op": "+",
+        "word": "walk"
+      },
+      {
+        "op": "+",
+        "word": "mountain"
+      }
+    ],
+    "solutionSimilarity": 0.5218,
+    "here": "hike"
+  },
+  {
+    "id": "hockey-hike",
+    "start": "hockey",
+    "goal": "hike",
+    "accepted": [
+      "trek",
+      "climb",
+      "trail"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "ice"
+      },
+      {
+        "op": "+",
+        "word": "walk"
+      },
+      {
+        "op": "+",
+        "word": "mountain"
+      }
+    ],
+    "solutionSimilarity": 0.5516,
+    "here": "hike"
+  },
+  {
+    "id": "football-swim",
+    "start": "football",
+    "goal": "swim",
+    "accepted": [
+      "swimmer",
+      "dive",
+      "aquatic"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "field"
+      },
+      {
+        "op": "+",
+        "word": "pool"
+      },
+      {
+        "op": "+",
+        "word": "water"
+      }
+    ],
+    "solutionSimilarity": 0.5534,
+    "here": "swim"
+  },
+  {
+    "id": "hockey-golf",
+    "start": "hockey",
+    "goal": "golf",
+    "accepted": [
+      "pga",
+      "tee",
+      "clubhouse"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "ice"
+      },
+      {
+        "op": "+",
+        "word": "club"
+      },
+      {
+        "op": "+",
+        "word": "green"
+      }
+    ],
+    "solutionSimilarity": 0.5197,
+    "here": "golf"
+  },
+  {
+    "id": "glacier-hockey",
+    "start": "glacier",
+    "goal": "hockey",
+    "accepted": [
+      "nhl",
+      "skating"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "cold"
+      },
+      {
+        "op": "+",
+        "word": "puck"
+      },
+      {
+        "op": "+",
+        "word": "skate"
+      }
+    ],
+    "solutionSimilarity": 0.5624,
+    "here": "hockey"
+  },
+  {
+    "id": "bronze-knife",
+    "start": "bronze",
+    "goal": "knife",
+    "accepted": [
+      "knives",
+      "dagger",
+      "razor"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "copper"
+      },
+      {
+        "op": "+",
+        "word": "blade"
+      },
+      {
+        "op": "+",
+        "word": "sharp"
+      }
+    ],
+    "solutionSimilarity": 0.5804,
+    "here": "knife"
+  },
+  {
+    "id": "wood-sweater",
+    "start": "wood",
+    "goal": "sweater",
+    "accepted": [
+      "scarf",
+      "jacket",
+      "vest"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "timber"
+      },
+      {
+        "op": "+",
+        "word": "knit"
+      },
+      {
+        "op": "+",
+        "word": "winter"
+      }
+    ],
+    "solutionSimilarity": 0.5656,
+    "here": "sweater"
+  },
+  {
+    "id": "steel-brick",
+    "start": "steel",
+    "goal": "brick",
+    "accepted": [
+      "mortar",
+      "tile",
+      "stone"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "metal"
+      },
+      {
+        "op": "+",
+        "word": "wall"
+      },
+      {
+        "op": "+",
+        "word": "clay"
+      }
+    ],
+    "solutionSimilarity": 0.5062,
+    "here": "brick"
+  },
+  {
+    "id": "bronze-painting",
+    "start": "bronze",
+    "goal": "painting",
+    "accepted": [
+      "mural",
+      "artwork",
+      "portrait"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "alloy"
+      },
+      {
+        "op": "+",
+        "word": "art"
+      },
+      {
+        "op": "+",
+        "word": "brush"
+      }
+    ],
+    "solutionSimilarity": 0.576,
+    "here": "painting"
+  },
+  {
+    "id": "canvas-statue",
+    "start": "canvas",
+    "goal": "statue",
+    "accepted": [
+      "monument",
+      "memorial"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "fabric"
+      },
+      {
+        "op": "+",
+        "word": "sculpture"
+      },
+      {
+        "op": "+",
+        "word": "marble"
+      }
+    ],
+    "solutionSimilarity": 0.6284,
+    "here": "statue"
+  },
+  {
+    "id": "wood-statue",
+    "start": "wood",
+    "goal": "statue",
+    "accepted": [
+      "monument",
+      "memorial"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "forest"
+      },
+      {
+        "op": "+",
+        "word": "sculpture"
+      },
+      {
+        "op": "+",
+        "word": "marble"
+      }
+    ],
+    "solutionSimilarity": 0.5717,
+    "here": "statue"
+  },
+  {
+    "id": "cotton-painting",
+    "start": "cotton",
+    "goal": "painting",
+    "accepted": [
+      "mural",
+      "artwork",
+      "portrait"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "fabric"
+      },
+      {
+        "op": "+",
+        "word": "art"
+      },
+      {
+        "op": "+",
+        "word": "canvas"
+      }
+    ],
+    "solutionSimilarity": 0.5936,
+    "here": "painting"
   }
 ]
