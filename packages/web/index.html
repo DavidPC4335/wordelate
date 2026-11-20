@@ -2,18 +2,66 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
     <meta name="color-scheme" content="light" />
-    <title>Wordelate</title>
+    <meta name="theme-color" content="#ffffff" />
+    <title>Wordelate — Daily word puzzle</title>
+    <meta
+      name="description"
+      content="Wordelate is a daily word puzzle. Add and subtract words to move from a start word toward the goal. Fewer moves score more points."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://wordelate.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Wordelate" />
+    <meta property="og:title" content="Wordelate — Daily word puzzle" />
+    <meta
+      property="og:description"
+      content="Add and subtract words to travel from a start word to a goal word. A new puzzle every day."
+    />
+    <meta property="og:url" content="https://wordelate.com/" />
+    <meta property="og:image" content="https://wordelate.com/howto/step-1.png" />
+    <meta property="og:image:width" content="1600" />
+    <meta property="og:image:height" content="1000" />
+    <meta property="og:image:alt" content="Wordelate, a daily puzzle that travels from one word to another." />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Wordelate — Daily word puzzle" />
+    <meta
+      name="twitter:description"
+      content="Add and subtract words to travel from a start word to a goal word. A new puzzle every day."
+    />
+    <meta name="twitter:image" content="https://wordelate.com/howto/step-1.png" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap"
       rel="stylesheet"
     />
   </head>
   <body>
     <div id="app"></div>
+    <noscript>
+      <p>
+        Wordelate is a daily word puzzle. Add and subtract words to travel from a start word to a
+        goal word. This game needs JavaScript.
+      </p>
+    </noscript>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Wordelate",
+        "url": "https://wordelate.com/",
+        "description": "A daily word puzzle. Add and subtract words to move from a start word toward the goal.",
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Any",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "image": "https://wordelate.com/howto/step-1.png"
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

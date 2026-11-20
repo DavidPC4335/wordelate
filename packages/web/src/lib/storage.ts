@@ -1,4 +1,6 @@
 import type { Move } from "@wordelate/game-math";
+import { COSMETICS, DEFAULT_COSMETIC, earnedIds, isCosmeticId } from "./rewards.js";
+import type { CosmeticId, RewardStats } from "./rewards.js";
 
 export const WIN_SIMILARITY_KEY = "wordelate.winSimilarity";
 export const PLAYER_ID_KEY = "wordelate.playerId";
@@ -301,20 +303,140 @@ export function readStreak(): StreakState {
   }
 }
 
+export const BEST_STREAK_KEY = "wordelate.bestStreak";
+export const UNLOCKED_KEY = "wordelate.unlocked";
+export const LOOK_KEY = "wordelate.look";
+export const HOWTO_SEEN_KEY = "wordelate.howtoSeen";
+export const LAST_PUZZLE_KEY = "wordelate.lastPuzzle";
+const GAME_PREFIX = "wordelate.game.";
+
+export function readBestStreak(): number {
+  const value = Number(storageGet(BEST_STREAK_KEY));
+  return Number.isInteger(value) && value > 0 ? value : 0;
+}
+
 /** Append one win and roll the streak. Give up never calls this. */
 export function recordWin(input: { puzzleId: string; moves: number; day: string }): {
   scores: ScoreEntry[];
   streak: StreakState;
+  bestStreak: number;
+  earned: number;
 } {
   const scores = readScores();
+  const earned = scoreForMoves(input.moves);
   scores.push({
     puzzleId: input.puzzleId,
     moves: input.moves,
-    score: scoreForMoves(input.moves),
+    score: earned,
     day: input.day,
   });
   storageSet(SCORES_KEY, JSON.stringify(scores));
   const streak = nextStreak(readStreak(), input.day);
   storageSet(STREAK_KEY, JSON.stringify(streak));
-  return { scores, streak };
+  const bestStreak = Math.max(readBestStreak(), streak.count);
+  storageSet(BEST_STREAK_KEY, String(bestStreak));
+  return { scores, streak, bestStreak, earned };
+}
+
+/** Best streak ever, including a streak that was earned before best streak was tracked. */
+export function currentRewardStats(scores: readonly ScoreEntry[], streak: StreakState): RewardStats {
+  return {
+    totalPoints: totalScore(scores),
+    bestStreak: Math.max(readBestStreak(), streak.count),
+  };
+}
+
+export function readUnlocked(): CosmeticId[] {
+  const raw = storageGet(UNLOCKED_KEY);
+  if (raw == null) return [];
+  try {
+    const data: unknown = JSON.parse(raw);
+    if (!Array.isArray(data)) return [];
+    return data.filter(isCosmeticId);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Save every look the stats have earned, on top of what was saved before.
+ * `fresh` is only what this call added, so the caller can celebrate it once.
+ */
+export function syncUnlocked(stats: RewardStats): { unlocked: CosmeticId[]; fresh: CosmeticId[] } {
+  const saved = new Set(readUnlocked());
+  const fresh: CosmeticId[] = [];
+  for (const id of earnedIds(stats)) {
+    if (saved.has(id)) continue;
+    saved.add(id);
+    if (id !== DEFAULT_COSMETIC) fresh.push(id);
+  }
+  saved.add(DEFAULT_COSMETIC);
+  const unlocked = [...saved];
+  storageSet(UNLOCKED_KEY, JSON.stringify(unlocked));
+  return { unlocked, fresh };
+}
+
+/** Admin preview tool: mark every look as unlocked, whether or not it was earned. */
+export function unlockAllLooks(): CosmeticId[] {
+  const unlocked = COSMETICS.map((item) => item.id);
+  storageSet(UNLOCKED_KEY, JSON.stringify(unlocked));
+  return unlocked;
+}
+
+/** The equipped look, or the default when it is unknown or no longer unlocked. */
+export function readLook(unlocked: readonly CosmeticId[]): CosmeticId {
+  const stored = storageGet(LOOK_KEY);
+  if (isCosmeticId(stored) && unlocked.includes(stored)) return stored;
+  return DEFAULT_COSMETIC;
+}
+
+export function writeLook(id: CosmeticId): void {
+  storageSet(LOOK_KEY, id);
+}
+
+export function readLastPuzzle(): string | null {
+  const stored = storageGet(LAST_PUZZLE_KEY);
+  return stored && stored.length > 0 ? stored : null;
+}
+
+export function writeLastPuzzle(id: string): void {
+  storageSet(LAST_PUZZLE_KEY, id);
+}
+
+export function readHowToSeen(): boolean {
+  return storageGet(HOWTO_SEEN_KEY) === "1";
+}
+
+export function writeHowToSeen(): void {
+  storageSet(HOWTO_SEEN_KEY, "1");
+}
+
+function storageKeys(): string[] {
+  const keys = new Set<string>(memory.keys());
+  const store = browserStorage();
+  if (store) {
+    try {
+      for (let i = 0; i < store.length; i++) {
+        const key = store.key(i);
+        if (key) keys.add(key);
+      }
+    } catch {
+      persistDisabled = true;
+    }
+  }
+  return [...keys];
+}
+
+/**
+ * True once the player has made a move, given up, or banked a score.
+ * Opening a puzzle writes an empty game, which does not count.
+ */
+export function hasGameHistory(): boolean {
+  if (readScores().length > 0) return true;
+  for (const key of storageKeys()) {
+    if (!key.startsWith(GAME_PREFIX)) continue;
+    const game = loadGame(key.slice(GAME_PREFIX.length));
+    if (game && (game.moves.length > 0 || game.gaveUp)) return true;
+  }
+  return false;
 }

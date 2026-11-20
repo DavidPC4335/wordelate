@@ -206,6 +206,7 @@ export async function nearestLabels(
   cutoff: number,
   goalSimilarity: number,
   warmSimilarity: number,
+  options?: { blocking?: boolean },
 ): Promise<string[]> {
   const goal = goalWord.toLowerCase();
   const anchorWords = anchors.map((anchor) => anchor.word.toLowerCase());
@@ -242,7 +243,7 @@ export async function nearestLabels(
         if (ranked.length > 3) ranked.pop();
       }
     }
-    if (end < pack.words.length) await yieldToUi();
+    if (end < pack.words.length && !options?.blocking) await yieldToUi();
   }
   if (ranked.length >= 2) {
     const first = ranked[0];

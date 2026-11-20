@@ -1,17 +1,25 @@
 import {
   ACESFilmicToneMapping,
   AmbientLight,
+  BackSide,
+  BufferGeometry,
   CanvasTexture,
   Color,
   Curve,
   DirectionalLight,
+  DoubleSide,
+  Float32BufferAttribute,
   Fog,
   GridHelper,
   Group,
   HemisphereLight,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   PerspectiveCamera,
+  Points,
+  PointsMaterial,
+  RingGeometry,
   Scene,
   SphereGeometry,
   SRGBColorSpace,
@@ -21,19 +29,20 @@ import {
 } from "three";
 import type { PathDrawState } from "../lib/path.js";
 import type { Point3 } from "../lib/project.js";
+import { COSMETICS } from "../lib/rewards.js";
+import type { SceneLook } from "../lib/rewards.js";
+import { domeTexture, skinTexture, spriteTexture, tubeTexture } from "./look-textures.js";
 
 export type PathScene = {
   update(state: PathDrawState): void;
   dispose(): void;
 };
 
-const INK_FALLBACK = "#1c1714";
-const INK_SOFT_FALLBACK = "#6e665c";
-const OK_FALLBACK = "#1d5c3d";
 const SERIF_FALLBACK = "Georgia, serif";
-const LABEL_HALO = "#e7eef6";
-const FOG_COLOR = 0xd0dae4;
 const FOV = 40;
+
+/** Panels carrying this attribute may float over the graph. The scene keeps the path clear of them. */
+const OVERLAY_SELECTOR = "[data-stage-overlay]";
 
 /** Share of the cloud radius. Latest stays the biggest bead. */
 const LATEST_SHARE = 0.11;
@@ -42,40 +51,94 @@ const START_SHARE = 0.064;
 const STEP_SHARE = 0.042;
 const TUBE_SHARE = 0.013;
 
-type Theme = { ink: string; inkSoft: string; ok: string; serif: string };
 type Role = "latest" | "goal" | "start" | "step";
 
-function readTheme(): Theme {
+const FALLBACK_LOOK: SceneLook = (COSMETICS[0] as { look: SceneLook }).look;
+
+/** The display font comes from the page so labels match the rest of the game. */
+function readFont(): string {
   const style = getComputedStyle(document.documentElement);
-  return {
-    ink: style.getPropertyValue("--ink").trim() || INK_FALLBACK,
-    inkSoft: style.getPropertyValue("--ink-soft").trim() || INK_SOFT_FALLBACK,
-    ok: style.getPropertyValue("--ok").trim() || OK_FALLBACK,
-    serif: style.getPropertyValue("--serif").trim() || SERIF_FALLBACK,
-  };
+  return style.getPropertyValue("--display").trim() || SERIF_FALLBACK;
 }
 
-function paintBackdrop(): CanvasTexture {
+/** The flat sky behind everything: a gradient with a soft glow. Patterns live on the sky dome instead. */
+function paintBackdrop(look: SceneLook): CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = 256;
   canvas.height = 256;
   const drawing = canvas.getContext("2d");
   if (!drawing) throw new Error("Could not paint the path background");
   const sky = drawing.createLinearGradient(0, 0, 0, canvas.height);
-  sky.addColorStop(0, "#c9daf0");
-  sky.addColorStop(0.38, "#e4ebf2");
-  sky.addColorStop(0.7, "#d5dbe3");
-  sky.addColorStop(1, "#b4c3d2");
+  sky.addColorStop(0, look.sky[0]);
+  sky.addColorStop(0.38, look.sky[1]);
+  sky.addColorStop(0.7, look.sky[2]);
+  sky.addColorStop(1, look.sky[3]);
   drawing.fillStyle = sky;
   drawing.fillRect(0, 0, canvas.width, canvas.height);
-  const glow = drawing.createRadialGradient(128, 108, 20, 128, 118, 176);
-  glow.addColorStop(0, "rgba(255, 255, 255, 0.4)");
+  look.ribbons.forEach((color, index) => {
+    drawing.save();
+    drawing.translate(128, 60 + index * 34);
+    drawing.rotate(-0.35 + index * 0.3);
+    drawing.scale(2.6, 0.32);
+    const ribbon = drawing.createRadialGradient(0, 0, 0, 0, 0, 80);
+    ribbon.addColorStop(0, color);
+    ribbon.addColorStop(1, "rgba(0, 0, 0, 0)");
+    drawing.fillStyle = ribbon;
+    drawing.beginPath();
+    drawing.arc(0, 0, 80, 0, Math.PI * 2);
+    drawing.fill();
+    drawing.restore();
+  });
+  const glow = drawing.createRadialGradient(
+    canvas.width / 2,
+    canvas.height * 0.42,
+    canvas.width * 0.08,
+    canvas.width / 2,
+    canvas.height * 0.46,
+    Math.max(canvas.width, canvas.height) * 0.69,
+  );
+  glow.addColorStop(0, look.glow);
   glow.addColorStop(1, "rgba(255, 255, 255, 0)");
   drawing.fillStyle = glow;
   drawing.fillRect(0, 0, canvas.width, canvas.height);
   const texture = new CanvasTexture(canvas);
   texture.colorSpace = SRGBColorSpace;
   return texture;
+}
+
+/** Small fixed star field, the same every time. Unit sphere; the scene scales it. */
+function starField(): Points {
+  const count = 240;
+  const positions = new Float32Array(count * 3);
+  let seed = 7;
+  const next = (): number => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  for (let i = 0; i < count; i++) {
+    const u = next() * 2 - 1;
+    const angle = next() * Math.PI * 2;
+    const ring = Math.sqrt(1 - u * u);
+    positions[i * 3] = ring * Math.cos(angle);
+    positions[i * 3 + 1] = Math.abs(u) * 0.9 + 0.1;
+    positions[i * 3 + 2] = ring * Math.sin(angle);
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  const material = new PointsMaterial({
+    color: 0xffffff,
+    size: 2.2,
+    sizeAttenuation: false,
+    transparent: true,
+    opacity: 0.85,
+    depthWrite: false,
+    fog: false,
+    toneMapped: false,
+  });
+  const points = new Points(geometry, material);
+  points.frustumCulled = false;
+  points.renderOrder = -1;
+  return points;
 }
 
 class PolylineCurve extends Curve<Vector3> {
@@ -153,7 +216,7 @@ function disposeMaterial(material: Mesh["material"]): void {
 }
 
 function lifted(hex: string, amount: number): Color {
-  return new Color(hex).lerp(new Color("#f4efe6"), amount);
+  return new Color(hex).lerp(new Color("#ffffff"), amount);
 }
 
 function sphereMaterial(color: Color, roughness: number, metalness: number, glow: number): MeshStandardMaterial {
@@ -166,12 +229,13 @@ function sphereMaterial(color: Color, roughness: number, metalness: number, glow
   });
 }
 
-function materialFor(role: Role, arrived: boolean, theme: Theme): MeshStandardMaterial {
-  if (role === "latest" && arrived) return sphereMaterial(lifted(theme.ok, 0.18), 0.38, 0.06, 0.12);
-  if (role === "latest") return sphereMaterial(lifted(theme.ink, 0.46), 0.36, 0.08, 0.06);
-  if (role === "goal") return sphereMaterial(lifted(theme.ok, 0.22), 0.44, 0.05, 0.08);
-  if (role === "start") return sphereMaterial(lifted(theme.ink, 0.28), 0.5, 0.04, 0.04);
-  return sphereMaterial(lifted(theme.inkSoft, 0.22), 0.62, 0.03, 0.03);
+function materialFor(role: Role, arrived: boolean, look: SceneLook): MeshStandardMaterial {
+  const boost = look.glowBoost;
+  if (role === "latest" && arrived) return sphereMaterial(lifted(look.goal, 0.1), 0.3, 0.06, 0.2 * boost);
+  if (role === "latest") return sphereMaterial(lifted(look.latest, 0.08), 0.3, 0.06, 0.14 * boost);
+  if (role === "goal") return sphereMaterial(lifted(look.goal, 0.1), 0.34, 0.05, 0.16 * boost);
+  if (role === "start") return sphereMaterial(lifted(look.start, 0.06), 0.4, 0.04, 0.1 * boost);
+  return sphereMaterial(lifted(look.step, 0.04), 0.5, 0.03, 0.08 * boost);
 }
 
 function shareFor(role: Role): number {
@@ -184,7 +248,9 @@ function shareFor(role: Role): number {
 export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement): PathScene {
   const stage = gl.parentElement;
   if (!stage) throw new Error("Path canvas is not mounted");
-  const theme = readTheme();
+  const font = readFont();
+  let look: SceneLook = FALLBACK_LOOK;
+  let lookId = "";
   const drawing = labels.getContext("2d");
   if (!drawing) throw new Error("Could not draw the path labels");
   const context: CanvasRenderingContext2D = drawing;
@@ -194,15 +260,19 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
     antialias: true,
     alpha: false,
   });
-  renderer.setClearColor(FOG_COLOR, 1);
+  renderer.setClearColor(new Color(look.fog), 1);
+  renderer.autoClear = false;
   renderer.toneMapping = ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   renderer.outputColorSpace = SRGBColorSpace;
 
   const scene = new Scene();
-  const backdrop = paintBackdrop();
-  scene.background = backdrop;
-  const fog = new Fog(FOG_COLOR, 1, 20);
+  // Two layers, drawn in turn: the sky (gradient, stars, dome pattern, drifting bits) first, then the
+  // graph on top. That keeps every decoration behind the beads and the path.
+  const backScene = new Scene();
+  let backdrop = paintBackdrop(look);
+  backScene.background = backdrop;
+  const fog = new Fog(new Color(look.fog), 1, 20);
   scene.fog = fog;
 
   const camera = new PerspectiveCamera(FOV, 1, 0.01, 50);
@@ -212,9 +282,29 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
   const fill = new DirectionalLight(0xc5d6ea, 0.7);
   scene.add(ambient, sky, key, key.target, fill, fill.target);
 
-  const grid = new GridHelper(1, 24, 0x7f96aa, 0xa4b4c4);
+  let grid = new GridHelper(1, 24, new Color(look.gridMajor), new Color(look.gridMinor));
   grid.position.y = -1;
   scene.add(grid);
+
+  const stars = starField();
+  stars.visible = false;
+  backScene.add(stars);
+
+  // A ring that breathes around the goal, so the target is easy to find.
+  const ringGeometry = new RingGeometry(0.92, 1, 48);
+  const ringMaterial = new MeshBasicMaterial({
+    color: new Color(look.ring),
+    transparent: true,
+    opacity: 0.6,
+    side: DoubleSide,
+    depthWrite: false,
+    fog: false,
+  });
+  const goalRing = new Mesh(ringGeometry, ringMaterial);
+  goalRing.visible = false;
+  scene.add(goalRing);
+  const reduceMotion =
+    typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const sphereGeometry = new SphereGeometry(1, 32, 24);
   const pointRoot = new Group();
@@ -238,6 +328,8 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
   let lastY = 0;
   let cssWidth = 1;
   let cssHeight = 1;
+  /** Pixels on the right edge covered by a floating panel. The path is framed in what is left. */
+  let inset = 0;
   let labelRadius = 1e-4;
   let goalRadius = 1e-4;
   let framedPuzzle = "";
@@ -248,19 +340,249 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
   let sparkSpan = 1;
   const sparks: { mesh: Mesh; velocity: Vector3; spin: number }[] = [];
 
+  // Fancy looks: bead skins, a patterned tube, drifting particles.
+  const skins = new Map<string, CanvasTexture>();
+  let tubeTex: CanvasTexture | null = null;
+  const domeGeometry = new SphereGeometry(1, 48, 32);
+  let dome: Mesh | null = null;
+  let drift: {
+    points: Points;
+    sprite: CanvasTexture;
+    x: Float32Array;
+    y: Float32Array;
+    z: Float32Array;
+    phase: Float32Array;
+    baseSize: number;
+  } | null = null;
+  const frameCenter = new Vector3();
+  let frameDistance = 1;
+  let lastTick = 0;
+
+  function dropFxTextures(): void {
+    for (const texture of skins.values()) texture.dispose();
+    skins.clear();
+    tubeTex?.dispose();
+    tubeTex = null;
+    if (dome) {
+      backScene.remove(dome);
+      const material = dome.material;
+      if (material instanceof MeshBasicMaterial) material.map?.dispose();
+      disposeMaterial(material);
+      dome = null;
+    }
+    if (drift) {
+      backScene.remove(drift.points);
+      drift.points.geometry.dispose();
+      disposeMaterial(drift.points.material);
+      drift.sprite.dispose();
+      drift = null;
+    }
+  }
+
+  /** A sphere around the whole scene carrying the look's sky pattern. It stays put in the world. */
+  function buildDome(next: SceneLook): void {
+    const kind = next.fx?.backdrop;
+    if (!kind) return;
+    const texture = domeTexture(kind);
+    texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    const material = new MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+      side: BackSide,
+      fog: false,
+      toneMapped: false,
+    });
+    dome = new Mesh(domeGeometry, material);
+    dome.frustumCulled = false;
+    dome.renderOrder = -2;
+    backScene.add(dome);
+  }
+
+  function buildDrift(next: SceneLook): void {
+    const spec = next.fx?.drift;
+    if (!spec) return;
+    const count = spec.count;
+    const sprite = spriteTexture(spec.shape);
+    const x = new Float32Array(count);
+    const y = new Float32Array(count);
+    const z = new Float32Array(count);
+    const phase = new Float32Array(count);
+    const colors = new Float32Array(count * 3);
+    let seed = 41;
+    const random = (): number => {
+      seed = (seed * 16807) % 2147483647;
+      return seed / 2147483647;
+    };
+    const tint = new Color();
+    for (let i = 0; i < count; i++) {
+      x[i] = random() * 2 - 1;
+      y[i] = random() * 2 - 1;
+      z[i] = random() * 2 - 1;
+      phase[i] = random() * Math.PI * 2;
+      tint.set(spec.colors[i % spec.colors.length] ?? "#ffffff");
+      colors[i * 3] = tint.r;
+      colors[i * 3 + 1] = tint.g;
+      colors[i * 3 + 2] = tint.b;
+    }
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute(new Float32Array(count * 3), 3));
+    geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
+    const material = new PointsMaterial({
+      map: sprite,
+      size: spec.size,
+      sizeAttenuation: false,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.92,
+      depthWrite: false,
+      alphaTest: 0.02,
+      fog: false,
+      toneMapped: false,
+    });
+    const points = new Points(geometry, material);
+    points.frustumCulled = false;
+    points.renderOrder = -1;
+    drift = { points, sprite, x, y, z, phase, baseSize: spec.size };
+    backScene.add(points);
+    sizeDrift();
+  }
+
+  function sizeDrift(): void {
+    if (!drift) return;
+    const material = drift.points.material;
+    if (material instanceof PointsMaterial) material.size = drift.baseSize * renderer.getPixelRatio();
+  }
+
+  function tickDrift(now: number, dt: number): void {
+    const spec = look.fx?.drift;
+    if (!drift || !spec) return;
+    const position = drift.points.geometry.getAttribute("position");
+    const t = now / 1000;
+    const travel = reduceMotion ? 0 : spec.speed * dt * 2;
+    for (let i = 0; i < spec.count; i++) {
+      let y = drift.y[i] ?? 0;
+      y += spec.rise ? travel : -travel;
+      if (y > 1) y -= 2;
+      else if (y < -1) y += 2;
+      drift.y[i] = y;
+      const sway = reduceMotion ? 0 : Math.sin(t * 0.7 + (drift.phase[i] ?? 0)) * 0.05;
+      position.setXYZ(i, (drift.x[i] ?? 0) + sway, y, drift.z[i] ?? 0);
+    }
+    position.needsUpdate = true;
+    drift.points.position.copy(frameCenter);
+    drift.points.scale.setScalar(frameDistance * 0.7);
+    // Sparkles twinkle by breathing the whole layer's opacity a little.
+    const material = drift.points.material;
+    if (material instanceof PointsMaterial && spec.shape === "star") {
+      material.opacity = reduceMotion ? 0.9 : 0.72 + Math.sin(t * 2.2) * 0.2;
+    }
+  }
+
+  /** A bead's material, with this look's skin wrapped on when it has one. */
+  function beadMaterial(role: Role, arrived: boolean): MeshStandardMaterial {
+    const material = materialFor(role, arrived, look);
+    const kind = look.fx?.skin;
+    if (!kind) return material;
+    const hex = `#${material.color.getHexString()}`;
+    const key = `${kind}:${hex}`;
+    let texture = skins.get(key);
+    if (!texture) {
+      texture = skinTexture(kind, hex);
+      skins.set(key, texture);
+    }
+    const glow = material.emissiveIntensity;
+    material.map = texture;
+    material.emissiveMap = texture;
+    material.color.set(0xffffff);
+    material.emissive.set(0xffffff);
+    material.emissiveIntensity = Math.min(glow, 0.7);
+    if (kind === "bubble") {
+      material.roughness = 0.12;
+    } else if (kind === "disco") {
+      material.roughness = 0.22;
+      material.metalness = 0.35;
+    } else if (kind === "candy") {
+      material.roughness = 0.2;
+    }
+    return material;
+  }
+
+  function makeGrid(next: SceneLook): GridHelper {
+    const made = new GridHelper(1, 24, new Color(next.gridMajor), new Color(next.gridMinor));
+    made.position.copy(grid.position);
+    made.scale.copy(grid.scale);
+    return made;
+  }
+
+  /** Repaint everything a cosmetic can change. Positions and sizes stay put. */
+  function applyLook(next: SceneLook, id: string): void {
+    if (id === lookId) return;
+    lookId = id;
+    look = next;
+    renderer.setClearColor(new Color(look.fog), 1);
+    renderer.toneMappingExposure = look.exposure;
+    fog.color.set(look.fog);
+    backdrop.dispose();
+    backdrop = paintBackdrop(look);
+    backScene.background = backdrop;
+    scene.remove(grid);
+    grid.geometry.dispose();
+    disposeMaterial(grid.material);
+    grid = makeGrid(look);
+    scene.add(grid);
+    stars.visible = look.stars;
+    ringMaterial.color.set(look.ring);
+    dropFxTextures();
+    if (look.fx?.tube) tubeTex = tubeTexture(look.fx.tube, look.tube);
+    buildDome(look);
+    buildDrift(look);
+  }
+
+  /** How far a floating panel reaches in from the right edge of the graph, in pixels. */
+  function measureInset(width: number): number {
+    if (!stage) return 0;
+    const panel = document.querySelector<HTMLElement>(OVERLAY_SELECTOR);
+    if (!panel) return 0;
+    const box = stage.getBoundingClientRect();
+    const over = panel.getBoundingClientRect();
+    const sharesRows = over.top < box.bottom - 4 && over.bottom > box.top + 4;
+    const sharesColumns = over.left < box.right - 4 && over.right > box.left + 4;
+    if (!sharesRows || !sharesColumns) return 0;
+    const reach = box.right - over.left + 14;
+    // Never give up more than half the graph, whatever the layout does.
+    return Math.round(Math.min(Math.max(reach, 0), width * 0.5));
+  }
+
+  /** Width of the part of the graph that is not under a panel. */
+  function visibleWidth(): number {
+    return Math.max(cssWidth - inset, 1);
+  }
+
+  function setAspect(): void {
+    camera.aspect = visibleWidth() / Math.max(cssHeight, 1);
+    // The frame is built for the visible part. The canvas runs on past it, under the panel.
+    if (inset > 0) camera.setViewOffset(visibleWidth(), cssHeight, 0, 0, cssWidth, cssHeight);
+    else camera.clearViewOffset();
+    camera.updateProjectionMatrix();
+  }
+
   function resize(): void {
     const width = stage?.clientWidth ?? 0;
     const height = stage?.clientHeight ?? 0;
     if (width < 2 || height < 2) return;
     cssWidth = width;
     cssHeight = height;
+    inset = measureInset(width);
+    const host = stage?.closest<HTMLElement>(".stage") ?? stage;
+    host?.style.setProperty("--inset-right", `${inset}px`);
     const ratio = Math.min(window.devicePixelRatio || 1, 2);
     renderer.setPixelRatio(ratio);
     renderer.setSize(width, height, false);
     labels.width = Math.round(width * ratio);
     labels.height = Math.round(height * ratio);
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
+    setAspect();
+    sizeDrift();
   }
 
   function paintText(
@@ -277,13 +599,14 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
     context.textBaseline = baseline;
     const measured = context.measureText(text).width;
     let drawX = x;
-    if (align === "right") drawX = Math.max(measured + 4, Math.min(cssWidth - 4, x));
-    else if (align === "left") drawX = Math.min(cssWidth - measured - 4, Math.max(4, x));
-    else drawX = Math.min(cssWidth - measured / 2 - 4, Math.max(measured / 2 + 4, x));
+    const right = visibleWidth();
+    if (align === "right") drawX = Math.max(measured + 4, Math.min(right - 4, x));
+    else if (align === "left") drawX = Math.min(right - measured - 4, Math.max(4, x));
+    else drawX = Math.min(right - measured / 2 - 4, Math.max(measured / 2 + 4, x));
     const drawY = Math.min(cssHeight - 4, Math.max(4, y));
     context.lineJoin = "round";
     context.lineWidth = 7;
-    context.strokeStyle = LABEL_HALO;
+    context.strokeStyle = look.halo;
     context.strokeText(text, drawX, drawY);
     context.fillStyle = color;
     context.fillText(text, drawX, drawY);
@@ -291,10 +614,10 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
 
   function fitSize(text: string, size: number, min: number, weight: number): number {
     let next = size;
-    context.font = `${weight} ${next}px ${theme.serif}`;
-    while (next > min && context.measureText(text).width > cssWidth * 0.56) {
+    context.font = `${weight} ${next}px ${font}`;
+    while (next > min && context.measureText(text).width > visibleWidth() * 0.56) {
       next -= 1;
-      context.font = `${weight} ${next}px ${theme.serif}`;
+      context.font = `${weight} ${next}px ${font}`;
     }
     return next;
   }
@@ -332,25 +655,25 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
     const word = (state.recentLabels[1] ?? "").trim();
     const showWord = word.length > 0 && word !== "…";
     const second = showWord ? `= ${word}` : "";
-    const size = fitSize(text, Math.min(36, cssWidth * 0.055), 14, 600);
-    const color = state.arrived ? theme.ok : theme.ink;
+    const size = fitSize(text, Math.min(36, visibleWidth() * 0.055), 14, 600);
+    const color = state.arrived ? look.arrivedInk : look.ink;
     const subSize = showWord ? fitSize(second, Math.max(13, Math.round(size * 0.82)), 12, 500) : 0;
     const mainY = head.y - head.radius - 8 - (showWord ? subSize + 4 : 0);
-    paintText(text, head.x, mainY, `600 ${size}px ${theme.serif}`, color, "bottom", "center");
+    paintText(text, head.x, mainY, `600 ${size}px ${font}`, color, "bottom", "center");
     if (showWord) {
       paintText(
         second,
         head.x,
         head.y - head.radius - 6,
-        `500 ${subSize}px ${theme.serif}`,
-        theme.inkSoft,
+        `500 ${subSize}px ${font}`,
+        look.inkSoft,
         "bottom",
         "center",
       );
     }
   }
 
-  /** Goal word, small and light, sitting on the target. Skipped once the path has landed there. */
+  /** Goal word, bold, sitting just above the target. Skipped once the path has landed there. */
   function drawGoalLabel(state: PathDrawState): void {
     if (state.arrived) return;
     const text = state.goalWord.trim();
@@ -362,14 +685,30 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
     const dx = goal.x - head.x;
     const dy = goal.y - head.y;
     if (head.visible && Math.hypot(dx, dy) < head.radius + goal.radius + 24) return;
-    const size = fitSize(text, Math.min(20, cssWidth * 0.032), 12, 500);
-    paintText(text, goal.x, goal.y, `500 ${size}px ${theme.serif}`, theme.inkSoft, "middle", "center");
+    const size = fitSize(text, Math.min(22, visibleWidth() * 0.04), 13, 600);
+    paintText(text, goal.x, goal.y - goal.radius - 8, `600 ${size}px ${font}`, look.arrivedInk, "bottom", "center");
+  }
+
+  /** Start word, small, under the first bead. The latest point labels itself, so skip when they meet. */
+  function drawStartLabel(state: PathDrawState): void {
+    if (state.atStart) return;
+    const text = state.startWord.trim();
+    if (text.length === 0) return;
+    const first = state.path[0] ?? state.start;
+    const spot = pointScreen(first, labelRadius * 0.6);
+    if (!spot.visible) return;
+    const latest = state.path[state.path.length - 1] ?? state.start;
+    const head = pointScreen(latest, labelRadius);
+    if (head.visible && Math.hypot(spot.x - head.x, spot.y - head.y) < head.radius + spot.radius + 20) return;
+    const size = fitSize(text, Math.min(18, visibleWidth() * 0.032), 12, 500);
+    paintText(text, spot.x, spot.y + spot.radius + 6, `500 ${size}px ${font}`, look.inkSoft, "top", "center");
   }
 
   function drawLabels(state: PathDrawState): void {
     const ratio = Math.min(window.devicePixelRatio || 1, 2);
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
     context.clearRect(0, 0, cssWidth, cssHeight);
+    drawStartLabel(state);
     drawGoalLabel(state);
     drawLatestLabels(state);
   }
@@ -471,8 +810,10 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
       const placed = projected(point);
       if (!Number.isFinite(placed.x) || !Number.isFinite(placed.y) || !Number.isFinite(placed.z)) return false;
       if (placed.z <= -1 || placed.z >= 1) return false;
-      if (placed.x < 0.13 || placed.x > 0.87) return false;
-      if (placed.y < 0.17 || placed.y > 0.86) return false;
+      // x is a share of the whole canvas. Judge it against the visible part only.
+      const across = (placed.x * cssWidth) / visibleWidth();
+      if (across < 0.13 || across > 0.87) return false;
+      if (placed.y < 0.2 || placed.y > 0.84) return false;
     }
     return true;
   }
@@ -514,9 +855,8 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
       theta = facing.theta;
       phi = facing.phi;
     }
-    const aspect = cssWidth / Math.max(cssHeight, 1);
-    camera.aspect = aspect;
-    camera.updateProjectionMatrix();
+    const aspect = visibleWidth() / Math.max(cssHeight, 1);
+    setAspect();
     let distance = viewDistance(span, aspect);
     // Opening shot only: start and goal sit toward opposite sides. Later moves
     // use the ordinary fit. Dragging changes the angle and leaves this distance.
@@ -531,6 +871,8 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
     fog.near = fogNear;
     fog.far = Math.max(distance + span * 4.6, fogNear + span);
 
+    frameCenter.set(cx, cy, cz);
+    frameDistance = distance;
     grid.position.set(cx, cy - span * 1.15, cz);
     grid.scale.setScalar(span * 12);
     labelRadius = span * LATEST_SHARE;
@@ -550,11 +892,11 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
     clearSparks();
     sparkStart = performance.now();
     sparkSpan = span;
-    const palette = [theme.ok, "#c6a15b", "#f4efe6", theme.ink];
+    const palette = look.sparks;
     for (let i = 0; i < 28; i++) {
       const mesh = new Mesh(
         sphereGeometry,
-        sphereMaterial(new Color(palette[i % palette.length] ?? theme.ok), 0.32, 0.08, 0.4),
+        sphereMaterial(new Color(palette[i % palette.length] ?? look.goal), 0.32, 0.08, 0.5),
       );
       mesh.scale.setScalar(span * (0.016 + (i % 5) * 0.007));
       mesh.position.set(origin[0], origin[1], origin[2]);
@@ -598,14 +940,47 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
     }
   }
 
+  /** Breathing ring on the goal and a slow drift of the stars. Skipped when motion is reduced. */
+  function tickAmbient(state: PathDrawState, now: number): void {
+    const showRing = !state.arrived;
+    goalRing.visible = showRing;
+    if (showRing) {
+      const beat = reduceMotion ? 0.5 : (now % 1800) / 1800;
+      const radius = goalRadius * (1.35 + beat * 0.9);
+      goalRing.position.set(state.goal[0], state.goal[1], state.goal[2]);
+      goalRing.scale.setScalar(radius);
+      goalRing.quaternion.copy(camera.quaternion);
+      ringMaterial.opacity = reduceMotion ? 0.5 : 0.7 * (1 - beat);
+    }
+    if (stars.visible) {
+      stars.position.copy(camera.position);
+      stars.scale.setScalar(camera.far * 0.45);
+    }
+    if (dome) {
+      dome.position.copy(camera.position);
+      dome.scale.setScalar(camera.far * 0.45);
+    }
+    const dt = lastTick === 0 ? 0 : Math.min(0.1, (now - lastTick) / 1000);
+    lastTick = now;
+    tickDrift(now, dt);
+    if (tubeTex && !reduceMotion) tubeTex.offset.x = -((now / 1000) * 0.35) % 1;
+    if (look.fx?.rainbow && showRing && !reduceMotion) ringMaterial.color.setHSL((now / 3500) % 1, 1, 0.6);
+  }
+
   function render(): void {
     if (disposed || !current) return;
     if (cssWidth < 2 || cssHeight < 2) return;
     frameView(current);
     tickSparks();
+    tickAmbient(current, performance.now());
+    renderer.clear();
+    renderer.render(backScene, camera);
     renderer.render(scene, camera);
     drawLabels(current);
-    if (sparks.length > 0) requestRender();
+    // The ring breathes, so keep drawing while the tab is showing and motion is allowed.
+    // Fancy looks keep drifting and flowing even after the path has landed.
+    const alive = !reduceMotion && !document.hidden && (!current.arrived || look.fx != null);
+    if (sparks.length > 0 || alive) requestRender();
   }
 
   function requestRender(): void {
@@ -632,7 +1007,7 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
   }
 
   function addSphere(point: Point3, role: Role, span: number, arrived: boolean): void {
-    const mesh = new Mesh(sphereGeometry, materialFor(role, arrived, theme));
+    const mesh = new Mesh(sphereGeometry, beadMaterial(role, arrived));
     const scale = span * shareFor(role);
     mesh.scale.setScalar(scale);
     mesh.position.set(point[0], point[1], point[2]);
@@ -689,14 +1064,29 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
       8,
       false,
     );
-    tube = new Mesh(
-      geometry,
-      new MeshStandardMaterial({
-        color: lifted(theme.ink, 0.2),
-        roughness: 0.72,
-        metalness: 0.04,
-      }),
-    );
+    const material = new MeshStandardMaterial({
+      color: new Color(look.tube),
+      emissive: new Color(look.tube),
+      emissiveIntensity: 0.12 * look.glowBoost,
+      roughness: 0.5,
+      metalness: 0.05,
+    });
+    if (tubeTex) {
+      let length = 0;
+      for (let i = 1; i < route.length; i++) {
+        const a = route[i - 1];
+        const b = route[i];
+        if (a && b) length += a.distanceTo(b);
+      }
+      // About one tile per six tube widths keeps the pattern readable at any zoom.
+      tubeTex.repeat.set(Math.max(1, length / (span * TUBE_SHARE * 8)), 1);
+      material.color.set(0xffffff);
+      material.emissive.set(0xffffff);
+      material.emissiveIntensity = 0.4;
+      material.map = tubeTex;
+      material.emissiveMap = tubeTex;
+    }
+    tube = new Mesh(geometry, material);
     scene.add(tube);
   }
 
@@ -731,7 +1121,12 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
     gl.style.cursor = "grab";
   }
 
+  function onVisibility(): void {
+    if (!document.hidden) requestRender();
+  }
+
   gl.style.cursor = "grab";
+  document.addEventListener("visibilitychange", onVisibility);
   gl.addEventListener("pointerdown", onPointerDown);
   gl.addEventListener("pointermove", onPointerMove);
   gl.addEventListener("pointerup", onPointerUp);
@@ -749,6 +1144,7 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
     update(state: PathDrawState) {
       if (disposed) return;
       current = state;
+      applyLook(state.look, state.lookId);
       syncPath(state);
       resize();
       requestRender();
@@ -758,6 +1154,8 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
       disposed = true;
       if (frame !== 0) cancelAnimationFrame(frame);
       observer.disconnect();
+      (stage.closest<HTMLElement>(".stage") ?? stage).style.removeProperty("--inset-right");
+      document.removeEventListener("visibilitychange", onVisibility);
       gl.removeEventListener("pointerdown", onPointerDown);
       gl.removeEventListener("pointermove", onPointerMove);
       gl.removeEventListener("pointerup", onPointerUp);
@@ -767,9 +1165,15 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
       clearPoints();
       dropTube();
       sphereGeometry.dispose();
+      domeGeometry.dispose();
       grid.geometry.dispose();
       disposeMaterial(grid.material);
+      stars.geometry.dispose();
+      disposeMaterial(stars.material);
+      ringGeometry.dispose();
+      ringMaterial.dispose();
       backdrop.dispose();
+      dropFxTextures();
       renderer.dispose();
       context.setTransform(1, 0, 0, 1, 0, 0);
       context.clearRect(0, 0, labels.width, labels.height);

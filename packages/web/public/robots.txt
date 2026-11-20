@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /vocab/
+
+Sitemap: https://wordelate.com/sitemap.xml

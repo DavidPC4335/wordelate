@@ -1,5 +1,36 @@
 {
+  "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "wordelate",
-  "compatibility_date": "2026-11-19",
-  "assets": { "directory": "./dist", "not_found_handling": "single-page-application" }
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-11-20",
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.05 }
+  },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "secrets": { "required": ["LEADERBOARD_SECRET"] },
+  "triggers": {
+    // Sunday 05:15 UTC is 00:15 Eastern standard time and 01:15 Eastern daylight time.
+    "crons": ["15 5 * * SUN"]
+  },
+  "r2_buckets": [
+    {
+      "binding": "ARCHIVE",
+      "bucket_name": "wordelate-scores"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "wordelate-board",
+      "database_id": "f4d0857c-e53d-40b4-9f52-d0ad9bf6a59f",
+      "migrations_dir": "migrations"
+    }
+  ]
 }

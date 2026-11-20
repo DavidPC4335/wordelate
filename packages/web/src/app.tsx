@@ -3,14 +3,21 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { Move } from "@wordelate/game-math";
 import { cosine, replay } from "@wordelate/game-math";
 import { Admin } from "./components/admin.js";
+import { BoardDialog } from "./components/board-dialog.js";
 import { Equation } from "./components/equation.js";
-import { HowItWorks } from "./components/how-it-works.js";
+import { HowToPlay } from "./components/how-to-play.js";
 import { Meter } from "./components/meter.js";
 import { MoveForm } from "./components/move-form.js";
 import { PathView } from "./components/path-view.js";
 import { Result } from "./components/result.js";
-import { Scores } from "./components/scores.js";
+import { RewardsDialog } from "./components/rewards-dialog.js";
 import { StatusBar } from "./components/status-bar.js";
+import { TopBar } from "./components/top-bar.js";
+import { StandingsView } from "./components/standings-view.js";
+import { WinDialog } from "./components/win-dialog.js";
+import type { WinReport } from "./components/win-dialog.js";
+import { joinBoard, submitName, submitScore } from "./lib/board-api.js";
+import type { BoardSnapshot } from "./lib/standings.js";
 import {
   MAX_MOVES,
   appliedSteps,
@@ -28,17 +35,31 @@ import { closestWord, loadPack, nearestLabels, rowFor } from "./lib/pack.js";
 import type { Pack, PackProgress } from "./lib/pack.js";
 import { customPuzzle, mergePuzzles } from "./lib/puzzles.js";
 import type { Puzzle } from "./lib/puzzles.js";
+import { COSMETICS, nextReward } from "./lib/rewards.js";
+import type { CosmeticId } from "./lib/rewards.js";
 import {
   calendarDay,
+  currentRewardStats,
   getPlayerId,
+  hasGameHistory,
   loadGame,
+  readHowToSeen,
+  readLastPuzzle,
+  readLook,
   readScores,
   readStreak,
   recordWin,
   saveGame,
+  scoreForMoves,
   streakAsOf,
+  syncUnlocked,
+  totalScore,
+  writeHowToSeen,
+  writeLastPuzzle,
+  unlockAllLooks,
+  writeLook,
 } from "./lib/storage.js";
-import type { ScoreEntry, StreakState } from "./lib/storage.js";
+import type { SavedGame, ScoreEntry, StreakState } from "./lib/storage.js";
 
 type PackState =
   | { status: "loading"; progress: PackProgress }
@@ -73,6 +94,12 @@ function positionKey(puzzleId: string, moves: readonly Move[]): string {
   return key;
 }
 
+/** Looks already earned, including ones earned before looks existed. */
+function initialRewards(): { unlocked: CosmeticId[]; look: CosmeticId } {
+  const { unlocked } = syncUnlocked(currentRewardStats(readScores(), readStreak()));
+  return { unlocked, look: readLook(unlocked) };
+}
+
 export function App() {
   const [packState, setPackState] = useState<PackState>({
     status: "loading",
@@ -89,6 +116,15 @@ export function App() {
   const [adminOpen, setAdminOpen] = useState(
     () => new URLSearchParams(window.location.search).get("admin") === "1",
   );
+  // The tutorial greets a brand-new player once. Closing it, or playing, ends the greeting.
+  const [howToOpen, setHowToOpen] = useState(() => !hasGameHistory() && !readHowToSeen());
+  const [rewardsOpen, setRewardsOpen] = useState(false);
+  const [rewards, setRewards] = useState(initialRewards);
+  const [winReport, setWinReport] = useState<WinReport | null>(null);
+  const [winOpen, setWinOpen] = useState(false);
+  const [boardOpen, setBoardOpen] = useState(false);
+  const [board, setBoard] = useState<BoardSnapshot | null>(null);
+  const [boardState, setBoardState] = useState<"loading" | "ready" | "off" | "error">("off");
   const [moveError, setMoveError] = useState<string | null>(null);
   const [nearestHit, setNearestHit] = useState<NearestHit | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
@@ -98,12 +134,14 @@ export function App() {
   const [streakState, setStreakState] = useState<StreakState>(() => readStreak());
   const scanGeneration = useRef(0);
   const shownProgress = useRef(0);
-  const openedSignature = useRef<string | null>(null);
-  const suppressLoadedWin = useRef(true);
-  const scoredSignature = useRef<string | null>(null);
+  // A win only scores when the player made a move on this puzzle in this session.
+  // A board that was already won when it was opened never scores again.
+  const armedPuzzle = useRef<string | null>(null);
+  const boardGeneration = useRef(0);
 
   useEffect(() => {
     getPlayerId();
+    void joinBoard();
   }, []);
 
   useEffect(() => {
@@ -136,9 +174,16 @@ export function App() {
         if (cancel) return;
         const first = list[0];
         if (!first) throw new Error("Puzzle list is empty");
-        const saved = loadGame(first.id);
+        // Pick up where the player left off, else the first puzzle they have not solved.
+        const solved = new Set(readScores().map((entry) => entry.puzzleId));
+        const remembered = readLastPuzzle();
+        const pick =
+          list.find((item) => item.id === remembered) ??
+          list.find((item) => !solved.has(item.id)) ??
+          first;
+        const saved = loadGame(pick.id);
         setPuzzles(list);
-        setPuzzleId(first.id);
+        setPuzzleId(pick.id);
         setMoves(saved?.moves ?? []);
         setGaveUp(saved?.gaveUp ?? false);
         setHydrated(true);
@@ -180,6 +225,10 @@ export function App() {
     if (!hydrated || !puzzle) return;
     saveGame(puzzle.id, { moves, gaveUp });
   }, [hydrated, puzzle, moves, gaveUp]);
+
+  useEffect(() => {
+    if (hydrated && puzzleId && !custom) writeLastPuzzle(puzzleId);
+  }, [custom, hydrated, puzzleId]);
 
   useEffect(() => {
     if (!pack || !puzzle || !played || !played.ok) {
@@ -243,24 +292,11 @@ export function App() {
   );
 
   useEffect(() => {
-    if (!hydrated || !puzzle) return;
-    const signature = positionKey(puzzle.id, moves);
-    if (openedSignature.current === null) openedSignature.current = signature;
-    // Give up writes nothing. A board that was already won when the page opened does not score again.
-    if (!played || !played.ok || !won || gaveUp) {
-      if (signature !== openedSignature.current) suppressLoadedWin.current = false;
-      scoredSignature.current = null;
-      return;
-    }
-    if (scoredSignature.current === signature) return;
-    if (suppressLoadedWin.current && signature === openedSignature.current) {
-      scoredSignature.current = signature;
-      return;
-    }
+    if (!hydrated || !puzzle || !played || !played.ok || !won || gaveUp) return;
+    if (armedPuzzle.current !== puzzle.id) return;
     const movesUsed = played.equationWords.length;
     if (movesUsed < 1) return;
-    scoredSignature.current = signature;
-    suppressLoadedWin.current = false;
+    armedPuzzle.current = null;
     const recorded = recordWin({
       puzzleId: puzzle.id,
       moves: movesUsed,
@@ -268,35 +304,87 @@ export function App() {
     });
     setScoreLog(recorded.scores);
     setStreakState(recorded.streak);
+    const stats = { totalPoints: totalScore(recorded.scores), bestStreak: recorded.bestStreak };
+    const synced = syncUnlocked(stats);
+    const newest = synced.fresh[synced.fresh.length - 1];
+    // A new look goes on straight away, so the graph itself is the surprise.
+    if (newest) writeLook(newest);
+    setRewards((before) => ({ unlocked: synced.unlocked, look: newest ?? before.look }));
+    setWinReport({
+      start: puzzle.start,
+      goal: puzzle.goal,
+      moves: movesUsed,
+      par: puzzle.par > 0 ? puzzle.par : null,
+      earned: recorded.earned,
+      totalPoints: stats.totalPoints,
+      streak: recorded.streak.count,
+      fresh: synced.fresh,
+      next: nextReward(stats),
+    });
+    if (puzzle.id.startsWith("custom-")) {
+      setBoard(null);
+      setBoardState("off");
+    } else {
+      const generation = boardGeneration.current + 1;
+      boardGeneration.current = generation;
+      setBoard(null);
+      setBoardState("loading");
+      const steps = appliedSteps(moves);
+      void submitScore({ puzzleId: puzzle.id, steps }).then((snapshot) => {
+        if (boardGeneration.current !== generation) return;
+        setBoard(snapshot);
+        setBoardState(snapshot ? "ready" : "error");
+      });
+    }
+    try {
+      navigator.vibrate?.([30, 50, 30]);
+    } catch {
+      // Vibration is a nicety. Some browsers refuse it.
+    }
   }, [gaveUp, hydrated, moves, played, puzzle, won]);
 
-  function selectPuzzle(id: string) {
-    setCustom(null);
+  // Let the graph's own sparkle play for a moment before the results card opens.
+  useEffect(() => {
+    if (!winReport) {
+      setWinOpen(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setWinOpen(true), 1250);
+    return () => window.clearTimeout(timer);
+  }, [winReport]);
+
+  /** One place that puts the board into a known state, so no stale result leaks across puzzles. */
+  function startBoard(id: string, saved: SavedGame | null) {
+    armedPuzzle.current = null;
     setPuzzleId(id);
-    setMoves([]);
-    setGaveUp(false);
+    setMoves(saved?.moves ?? []);
+    setGaveUp(saved?.gaveUp ?? false);
     setRevealed(false);
     setMoveError(null);
     setShareNote(null);
     setNearestHit(null);
+    setWinReport(null);
+    setWinOpen(false);
     setFormKey((key) => key + 1);
+  }
+
+  /** Open a puzzle from the list. Earlier progress on it comes back. */
+  function openPuzzle(id: string) {
+    setCustom(null);
+    startBoard(id, loadGame(id));
+  }
+
+  /** Wipe a puzzle and start it over. */
+  function selectPuzzle(id: string) {
+    setCustom(null);
     saveGame(id, { moves: [], gaveUp: false });
+    startBoard(id, null);
   }
 
   function resetPuzzle() {
     if (!puzzle) return;
-    if (custom && custom.id === puzzle.id) {
-      setMoves([]);
-      setGaveUp(false);
-      setRevealed(false);
-      setMoveError(null);
-      setShareNote(null);
-      setNearestHit(null);
-      setFormKey((key) => key + 1);
-      saveGame(puzzle.id, { moves: [], gaveUp: false });
-      return;
-    }
-    selectPuzzle(puzzle.id);
+    saveGame(puzzle.id, { moves: [], gaveUp: false });
+    startBoard(puzzle.id, null);
   }
 
   function playPair(startRaw: string, goalRaw: string): string | null {
@@ -310,15 +398,8 @@ export function App() {
     } else {
       const made = customPuzzle(start, goal);
       setCustom(made);
-      setPuzzleId(made.id);
-      setMoves([]);
-      setGaveUp(false);
-      setRevealed(false);
-      setMoveError(null);
-      setShareNote(null);
-      setNearestHit(null);
-      setFormKey((key) => key + 1);
       saveGame(made.id, { moves: [], gaveUp: false });
+      startBoard(made.id, null);
     }
     setAdminOpen(false);
     return null;
@@ -346,6 +427,7 @@ export function App() {
       setMoveError(describeMoveError(outcome.error));
       return false;
     }
+    armedPuzzle.current = puzzle.id;
     setMoves(outcome.moves);
     setMoveError(null);
     setShareNote(null);
@@ -369,53 +451,128 @@ export function App() {
   }
 
   const streakCount = streakAsOf(streakState, calendarDay(new Date()));
+  const rewardStats = useMemo(() => currentRewardStats(scoreLog, streakState), [scoreLog, streakState]);
+  const solvedIds = useMemo(() => new Set(scoreLog.map((entry) => entry.puzzleId)), [scoreLog]);
 
-  function layout(body: ComponentChildren, play = false) {
+  /** The next puzzle in list order that is not solved yet. Falls back to simply the next one. */
+  function nextPuzzleId(): string | null {
+    if (!puzzles || puzzles.length === 0) return null;
+    const at = puzzles.findIndex((item) => item.id === puzzleId);
+    for (let step = 1; step <= puzzles.length; step++) {
+      const candidate = puzzles[(Math.max(at, -1) + step) % puzzles.length];
+      if (candidate && candidate.id !== puzzleId && !solvedIds.has(candidate.id)) return candidate.id;
+    }
+    const plain = puzzles[(Math.max(at, -1) + 1) % puzzles.length];
+    return plain && plain.id !== puzzleId ? plain.id : null;
+  }
+
+  function playNext() {
+    const id = nextPuzzleId();
+    if (id) openPuzzle(id);
+  }
+
+  function closeHowTo() {
+    setHowToOpen(false);
+    writeHowToSeen();
+  }
+
+  function layout(body: ComponentChildren) {
     return (
-      <main class={play ? "page page-play" : "page"}>
-        <header class="mast">
-          <div class="masthead">
-            <h1 class="title">Wordelate</h1>
-            <div class="mast-tools">
-              {streakCount > 0 ? <p class="streak">{streakCount} day streak</p> : null}
-              <Scores entries={scoreLog} />
-              <button
-                type="button"
-                class="admin-toggle"
-                aria-expanded={adminOpen}
-                aria-controls="admin-panel"
-                onClick={() => setAdminOpen((open) => !open)}
-              >
-                Admin
-              </button>
-            </div>
-          </div>
-          <Admin
-            open={adminOpen}
-            puzzles={puzzles ?? []}
-            currentId={puzzle?.id ?? ""}
-            onSelect={selectPuzzle}
-            onReset={resetPuzzle}
-            onReveal={() => setRevealed(true)}
-            onHide={() => setRevealed(false)}
-            onPlay={playPair}
-          />
-        </header>
+      <div class="app">
+        <TopBar
+          start={puzzle?.start ?? null}
+          goal={puzzle?.goal ?? null}
+          streak={streakCount}
+          points={rewardStats.totalPoints}
+          adminOpen={adminOpen}
+          onRewards={() => setRewardsOpen(true)}
+          onBoard={() => setBoardOpen(true)}
+          onHelp={() => setHowToOpen(true)}
+          onAdmin={() => setAdminOpen((open) => !open)}
+        />
         {body}
-      </main>
+        <Admin
+          open={adminOpen}
+          onClose={() => setAdminOpen(false)}
+          puzzles={puzzles ?? []}
+          currentId={puzzle?.id ?? ""}
+          solvedIds={solvedIds}
+          revealed={revealed}
+          onSelect={(id) => {
+            openPuzzle(id);
+            setAdminOpen(false);
+          }}
+          onReset={() => {
+            resetPuzzle();
+            setAdminOpen(false);
+          }}
+          onReveal={() => setRevealed(true)}
+          onHide={() => setRevealed(false)}
+          onPlay={playPair}
+          lockedLooks={COSMETICS.filter((item) => !rewards.unlocked.includes(item.id)).length}
+          onUnlockLooks={() => {
+            const unlocked = unlockAllLooks();
+            setRewards((before) => ({ ...before, unlocked }));
+            setAdminOpen(false);
+            setRewardsOpen(true);
+          }}
+        />
+        <RewardsDialog
+          open={rewardsOpen}
+          onClose={() => setRewardsOpen(false)}
+          stats={rewardStats}
+          streak={streakCount}
+          scores={scoreLog}
+          unlocked={rewards.unlocked}
+          equipped={rewards.look}
+          onEquip={(id) => {
+            writeLook(id);
+            setRewards((before) => ({ ...before, look: id }));
+          }}
+        />
+        <HowToPlay open={howToOpen} onClose={closeHowTo} />
+        <BoardDialog open={boardOpen} onClose={() => setBoardOpen(false)} />
+        <WinDialog
+          open={winOpen}
+          report={winReport}
+          hasNext={nextPuzzleId() !== null}
+          shareNote={shareNote}
+          board={
+            <StandingsView
+              snapshot={board}
+              state={boardState}
+              onName={async (name) => {
+                const result = await submitName(name);
+                if (result.snapshot) {
+                  setBoard(result.snapshot);
+                  setBoardState("ready");
+                }
+                return result.error;
+              }}
+            />
+          }
+          onNext={playNext}
+          onShare={() => {
+            void share();
+          }}
+          onClose={() => setWinOpen(false)}
+        />
+      </div>
     );
   }
 
   if (packState.status === "error" || puzzleError) {
     return layout(
-      <section class="notice" role="alert">
-        <h2>Couldn’t open the game</h2>
-        {puzzleError ? <p>{puzzleError}</p> : null}
-        {packState.status === "error" ? <p>{packState.message}</p> : null}
-        <button type="button" class="action" onClick={() => setLoadAttempt((n) => n + 1)}>
-          Try again
-        </button>
-      </section>,
+      <main class="notice-wrap">
+        <section class="notice" role="alert">
+          <h2>Couldn’t open the game</h2>
+          {puzzleError ? <p>{puzzleError}</p> : null}
+          {packState.status === "error" ? <p>{packState.message}</p> : null}
+          <button type="button" class="btn btn-go" onClick={() => setLoadAttempt((n) => n + 1)}>
+            Try again
+          </button>
+        </section>
+      </main>,
     );
   }
 
@@ -424,28 +581,32 @@ export function App() {
     const ratio = progress?.ratio;
     const percent = ratio == null ? null : Math.round(ratio * 100);
     return layout(
-      <section class="notice" aria-busy="true">
-        <h2>{progress?.label ?? "Opening the vocabulary"}</h2>
-        <div class="meter-track load-track">
-          <div
-            class={ratio == null ? "meter-fill indeterminate" : "meter-fill"}
-            style={{ width: ratio == null ? "40%" : `${Math.round(ratio * 100)}%` }}
-          />
-        </div>
-        <p>{percent == null ? "Working…" : `${percent}%`}</p>
-      </section>,
+      <main class="notice-wrap">
+        <section class="notice" aria-busy="true">
+          <h2>{progress?.label ?? "Opening the vocabulary"}</h2>
+          <div class="meter-track load-track">
+            <div
+              class={ratio == null ? "meter-fill indeterminate" : "meter-fill"}
+              style={{ width: ratio == null ? "40%" : `${Math.round(ratio * 100)}%` }}
+            />
+          </div>
+          <p>{percent == null ? "Warming up the words…" : `${percent}%`}</p>
+        </section>
+      </main>,
     );
   }
 
   if (!played.ok) {
     return layout(
-      <section class="notice" role="alert">
-        <h2>This saved game can’t be replayed</h2>
-        <p>{describeMoveError(played.error)}</p>
-        <button type="button" class="action" onClick={resetPuzzle}>
-          Reset puzzle
-        </button>
-      </section>,
+      <main class="notice-wrap">
+        <section class="notice" role="alert">
+          <h2>This saved game can’t be replayed</h2>
+          <p>{describeMoveError(played.error)}</p>
+          <button type="button" class="btn btn-go" onClick={resetPuzzle}>
+            Reset puzzle
+          </button>
+        </section>
+      </main>,
     );
   }
 
@@ -459,18 +620,12 @@ export function App() {
   });
   shownProgress.current = progress;
   const solution = puzzle.solution.length > 0 ? formatEquation(puzzle.start, puzzle.solution) : null;
-  const locked = won || gaveUp || played.movesUsed >= MAX_MOVES;
+  const outOfMoves = played.movesUsed >= MAX_MOVES;
+  const locked = won || gaveUp || outOfMoves;
 
   return layout(
-    <article class="stage">
-      <div class="stage-graph">
-        <h2 class="pair stage-pair">
-          <span>{puzzle.start}</span>
-          <span class="arrow" aria-hidden="true">
-            →
-          </span>
-          <span class="pair-goal">{puzzle.goal}</span>
-        </h2>
+    <>
+      <main class="stage">
         {startRow && goalRow ? (
           <PathView
             pack={packState.pack}
@@ -482,50 +637,54 @@ export function App() {
             position={played.position}
             similarity={played.similarity}
             won={won}
+            lookId={rewards.look}
           />
         ) : null}
-      </div>
-      <div class="dock">
-        <div class="dock-meta">
+        <p class="stage-hint">Drag the graph to look around</p>
+      </main>
+      <section class="dock" aria-label="Your moves">
+        <div class="dock-inner" data-stage-overlay>
           <Equation start={puzzle.start} steps={steps} />
+          <Meter key={`${puzzle.id}:${formKey}`} progress={progress} won={won} />
           <StatusBar
             movesUsed={played.movesUsed}
             maxMoves={MAX_MOVES}
             par={puzzle.par > 0 ? puzzle.par : null}
+            worth={scoreForMoves(steps.length + 1)}
+          />
+          <MoveForm
+            key={formKey}
+            error={moveError}
+            locked={locked}
+            busy={pendingHere && !won}
+            canUndo={played.equationWords.length > 0}
+            resolveWord={(word) => closestWord(packState.pack, word) ?? word}
+            onAdd={(word) => attempt({ op: "+", word })}
+            onSubtract={(word) => attempt({ op: "-", word })}
+            onUndo={() => {
+              attempt({ op: "undo" });
+            }}
+          />
+          <Result
+            won={won}
+            gaveUp={gaveUp}
+            revealed={revealed}
+            outOfMoves={outOfMoves}
+            solution={solution}
+            hasNext={nextPuzzleId() !== null}
+            onGiveUp={() => {
+              setGaveUp(true);
+              setRevealed(true);
+            }}
+            onNext={playNext}
+            onRetry={resetPuzzle}
+            onShare={() => {
+              void share();
+            }}
+            shareNote={shareNote}
           />
         </div>
-        <Meter progress={progress} won={won} />
-        <MoveForm
-          key={formKey}
-          error={moveError}
-          locked={locked}
-          busy={pendingHere && !won}
-          canUndo={played.equationWords.length > 0}
-          resolveWord={(word) => closestWord(packState.pack, word) ?? word}
-          onAdd={(word) => attempt({ op: "+", word })}
-          onSubtract={(word) => attempt({ op: "-", word })}
-          onUndo={() => {
-            attempt({ op: "undo" });
-          }}
-        />
-        <Result
-          won={won}
-          gaveUp={gaveUp}
-          revealed={revealed}
-          outOfMoves={played.movesUsed >= MAX_MOVES}
-          solution={solution}
-          onGiveUp={() => {
-            setGaveUp(true);
-            setRevealed(true);
-          }}
-          onShare={() => {
-            void share();
-          }}
-          shareNote={shareNote}
-        />
-        <HowItWorks />
-      </div>
-    </article>,
-    true,
+      </section>
+    </>,
   );
 }

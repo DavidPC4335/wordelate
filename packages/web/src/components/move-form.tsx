@@ -1,4 +1,5 @@
-import { useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
+import { MinusIcon, PlusIcon, UndoIcon } from "./icons.js";
 
 export type MoveOp = "add" | "subtract";
 
@@ -32,15 +33,39 @@ export function MoveForm({
   onUndo: () => void;
 }) {
   const [value, setValue] = useState("");
+  const [shake, setShake] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
+  const row = useRef<HTMLDivElement>(null);
   const held = locked || busy;
+
+  // A rejected word wiggles the row once, so the error is noticed even on a small screen.
+  useEffect(() => {
+    if (shake === 0) return;
+    const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced || typeof row.current?.animate !== "function") return;
+    row.current.animate(
+      [
+        { transform: "translateX(0)" },
+        { transform: "translateX(-7px)" },
+        { transform: "translateX(6px)" },
+        { transform: "translateX(-4px)" },
+        { transform: "translateX(0)" },
+      ],
+      { duration: 340, easing: "ease-out" },
+    );
+  }, [shake]);
 
   function submit(raw: string, button: MoveOp) {
     if (held) return;
     const { op, word } = parseSignedEntry(raw, button);
     const resolved = word.length === 0 ? word : resolveWord(word);
     const ok = op === "add" ? onAdd(resolved) : onSubtract(resolved);
-    if (!ok) return;
+    if (!ok) {
+      setShake((n) => n + 1);
+      return;
+    }
     setValue("");
+    input.current?.focus();
   }
 
   return (
@@ -52,17 +77,13 @@ export function MoveForm({
         submit(value, "add");
       }}
     >
-      <div class="entry-head">
-        <label class="word-label" for="word">
-          Word
-        </label>
-        <button type="button" class="undo" disabled={held || !canUndo} onClick={onUndo}>
-          Undo
-        </button>
-      </div>
-      <div class="entry">
+      <label class="sr-only" for="word">
+        Word to add or subtract
+      </label>
+      <div class="entry" ref={row}>
         <input
           id="word"
+          ref={input}
           class="word-input"
           value={value}
           disabled={locked}
@@ -71,24 +92,36 @@ export function MoveForm({
           autoCorrect="off"
           spellcheck={false}
           enterkeyhint="done"
-          placeholder="a vocabulary word"
+          placeholder={locked ? "Round over" : "Type a word"}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? "move-error" : undefined}
           onInput={(event) => setValue(event.currentTarget.value)}
         />
-        <button type="submit" class="op" aria-label="Add" disabled={held}>
-          +
+        <button type="submit" class="op op-add" aria-label="Add this word" disabled={held}>
+          <PlusIcon size={26} />
         </button>
         <button
           type="button"
-          class="op"
-          aria-label="Subtract"
+          class="op op-sub"
+          aria-label="Subtract this word"
           disabled={held}
           onClick={() => submit(value, "subtract")}
         >
-          −
+          <MinusIcon size={26} />
+        </button>
+        <button
+          type="button"
+          class="op op-undo"
+          aria-label="Undo last move"
+          title="Undo (counts as a move)"
+          disabled={held || !canUndo}
+          onClick={onUndo}
+        >
+          <UndoIcon size={22} />
         </button>
       </div>
       {error ? (
-        <p class="move-error" role="alert">
+        <p class="move-error" id="move-error" role="alert">
           {error}
         </p>
       ) : null}

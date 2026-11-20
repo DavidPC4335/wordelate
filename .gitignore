@@ -10,6 +10,8 @@ __pycache__/
 .env
 .env.*
 !.env.example
+.dev.vars
+.wrangler/
 
 # gensim cache for word2vec-google-news-300 (multi-gigabyte; never commit)
 gensim-data/

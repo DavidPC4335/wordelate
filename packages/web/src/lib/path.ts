@@ -1,6 +1,7 @@
 import { replay, type Move, type VectorFor } from "@wordelate/game-math";
 import { MAX_MOVES, type AppliedStep } from "./game.js";
 import type { Point3 } from "./project.js";
+import type { SceneLook } from "./rewards.js";
 
 export type PathDrawState = {
   start: Point3;
@@ -18,6 +19,9 @@ export type PathDrawState = {
   atStart: boolean;
   /** Latest point has been drawn on the goal, because this position wins. */
   arrived: boolean;
+  /** The equipped cosmetic. Changes colors only, never positions. */
+  lookId: string;
+  look: SceneLook;
 };
 
 /**

@@ -5,6 +5,8 @@ import { LABEL_NEAR_DUPLICATE_CUTOFF, LABEL_WARM_SIMILARITY } from "../lib/game.
 import { equationPositions, type PathDrawState } from "../lib/path.js";
 import { nearestLabels, rowFor, type Pack } from "../lib/pack.js";
 import { projectTo3 } from "../lib/project.js";
+import { cosmeticFor, skyGradient } from "../lib/rewards.js";
+import type { CosmeticId } from "../lib/rewards.js";
 
 type PathSceneHandle = {
   update(state: PathDrawState): void;
@@ -38,25 +40,31 @@ function pathCaption(
   return caption;
 }
 
-function Celebration() {
-  const flecks = Array.from({ length: 22 }, (_, index) => {
-    const angle = (index / 22) * Math.PI * 2;
-    const distance = 110 + (index % 5) * 34;
+function Celebration({ colors }: { colors: readonly string[] }) {
+  const flecks = Array.from({ length: 34 }, (_, index) => {
+    const angle = (index / 34) * Math.PI * 2;
+    const distance = 120 + (index % 6) * 38;
     return {
       dx: `${Math.cos(angle) * distance}px`,
-      dy: `${Math.sin(angle) * distance - 30}px`,
+      dy: `${Math.sin(angle) * distance - 40}px`,
       delay: `${(index % 7) * 0.04}s`,
-      tone: index % 3,
+      color: colors[index % Math.max(colors.length, 1)] ?? "#ffc233",
+      round: index % 3 !== 0,
     };
   });
   return (
     <div class="celebrate" role="status">
-      <p class="celebrate-word">Correct</p>
+      <p class="celebrate-word">Solved!</p>
       {flecks.map((fleck, index) => (
         <span
           key={index}
-          class={fleck.tone === 0 ? "fleck fleck-ok" : fleck.tone === 1 ? "fleck fleck-gold" : "fleck"}
-          style={{ ["--dx"]: fleck.dx, ["--dy"]: fleck.dy, animationDelay: fleck.delay }}
+          class={fleck.round ? "fleck" : "fleck fleck-square"}
+          style={{
+            ["--dx"]: fleck.dx,
+            ["--dy"]: fleck.dy,
+            background: fleck.color,
+            animationDelay: fleck.delay,
+          }}
         />
       ))}
     </div>
@@ -73,6 +81,7 @@ export function PathView({
   position,
   similarity,
   won,
+  lookId,
 }: {
   pack: Pack;
   start: Float32Array;
@@ -83,6 +92,7 @@ export function PathView({
   position: Float32Array;
   similarity: number;
   won: boolean;
+  lookId: CosmeticId;
 }) {
   const [failed, setFailed] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
@@ -107,6 +117,8 @@ export function PathView({
     return [equationLabel, second];
   }, [atStart, equationLabel, goalWord, scannedWord, won]);
 
+  const look = cosmeticFor(lookId).look;
+
   const drawState = useMemo<PathDrawState>(() => {
     const samples = equationPositions({
       start,
@@ -130,9 +142,11 @@ export function PathView({
       recentLabels,
       atStart,
       arrived: won,
+      lookId,
+      look,
     };
     // stepKey changes exactly when the applied equation changes, so `steps` is current here.
-  }, [atStart, goal, goalWord, pack, position, recentLabels, start, startWord, stepKey, won]);
+  }, [atStart, goal, goalWord, look, lookId, pack, position, recentLabels, start, startWord, stepKey, won]);
 
   drawRef.current = drawState;
 
@@ -216,11 +230,11 @@ export function PathView({
 
   return (
     <div class="path-block">
-      <div class="path-stage" id="path-view">
-        {failed ? <p class="path-fallback">The 3D path couldn’t be opened.</p> : null}
+      <div class="path-stage" id="path-view" style={{ background: skyGradient(look) }}>
+        {failed ? <p class="path-fallback">The 3D graph couldn’t be opened on this device. You can still play. Your moves show in the bar below.</p> : null}
         <canvas ref={glRef} class="path-canvas" role="img" aria-label={caption} />
         <canvas ref={labelRef} class="path-overlay" aria-hidden="true" />
-        {celebrate ? <Celebration /> : null}
+        {celebrate ? <Celebration colors={look.sparks} /> : null}
       </div>
     </div>
   );
