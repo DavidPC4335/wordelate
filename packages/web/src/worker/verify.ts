@@ -29,7 +29,7 @@ export async function verifySolution(
     banned: [],
     maxMoves: MAX_MOVES,
   });
-  if (!played.ok || played.equationWords.length < 1) return null;
+  if (!played.ok || played.equationWords.length < 1 || played.scoredSteps.length < 1) return null;
   const anchors = [{ word: puzzle.start, vector: start }];
   for (const word of played.equationWords) {
     const vector = rowFor(pack, word);
@@ -59,10 +59,12 @@ export async function verifySolution(
     acceptedWords: puzzle.accepted,
   });
   if (!won) return null;
-  const moves = played.equationWords.length;
+  const moves = played.scoredSteps.length;
   if (steps.length !== moves) return null;
   for (let i = 0; i < moves; i++) {
-    if (played.equationWords[i] !== steps[i]?.word) return null;
+    const scored = played.scoredSteps[i];
+    const sent = steps[i];
+    if (!scored || !sent || scored.word !== sent.word || scored.op !== sent.op) return null;
   }
   return {
     score: scoreForMoves(moves),
@@ -71,7 +73,7 @@ export async function verifySolution(
       puzzleId: puzzle.id,
       start: puzzle.start,
       goal: puzzle.goal,
-      steps: [...steps],
+      steps: played.scoredSteps.map((step) => ({ op: step.op, word: step.word })),
     },
   };
 }

@@ -22,6 +22,9 @@ export type BoardEntry = {
   moves: number;
   puzzle: string;
   answer: string;
+  start: string;
+  goal: string;
+  steps: BoardStep[];
   /** Share of today's players with a strictly lower score, as a whole percent. */
   betterThan: number;
   /** Marker position on the bell, 1–99, with ties sharing the middle of their band. */
@@ -80,6 +83,52 @@ export function retentionStart(today: string): string {
   return shiftDay(today, -(BOARD_DAYS - 1));
 }
 
+/** Today first, then the older days still on the board. */
+export function recentDays(today: string): string[] {
+  return Array.from({ length: BOARD_DAYS }, (_, ago) => shiftDay(today, -ago));
+}
+
+/** Whole days from `from` to `to`. Negative when `to` is earlier. */
+export function daysBetween(from: string, to: string): number | null {
+  if (!isDayKey(from) || !isDayKey(to)) return null;
+  const start = Date.parse(`${from}T00:00:00.000Z`);
+  const end = Date.parse(`${to}T00:00:00.000Z`);
+  return Math.round((end - start) / 86_400_000);
+}
+
+/** Pieces for a day button: a short top line, the date number, and a long label. */
+export function dayParts(day: string, today: string): { top: string; num: string; long: string } {
+  const match = DAY_RE.exec(day);
+  const year = Number(match?.[1]);
+  const month = Number(match?.[2]);
+  const date = Number(match?.[3]);
+  if (!match || !Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(date)) {
+    return { top: day, num: "", long: day };
+  }
+  const utc = new Date(Date.UTC(year, month - 1, date));
+  const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(utc);
+  const long = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(utc);
+  return { top: day === today ? "Today" : weekday, num: String(date), long };
+}
+
+/** Today, Yesterday, or a short month-and-day label. */
+export function formatDayLabel(day: string, today: string): string {
+  if (day === today) return "Today";
+  if (day === shiftDay(today, -1)) return "Yesterday";
+  const match = DAY_RE.exec(day);
+  const yearText = match?.[1];
+  const monthText = match?.[2];
+  const dateText = match?.[3];
+  if (!yearText || !monthText || !dateText) return day;
+  const utc = new Date(Date.UTC(Number(yearText), Number(monthText) - 1, Number(dateText)));
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(utc);
+}
+
 export function dayInWindow(day: string, today: string): boolean {
   return isDayKey(day) && isDayKey(today) && day >= retentionStart(today) && day <= today;
 }
@@ -134,6 +183,27 @@ export function normalZ(p: number): number {
   const q = p - 0.5;
   const r = q * q;
   return (poly(a, r) * q) / (poly(b, r) * r + 1);
+}
+
+const BELL_PAD = 8;
+const BELL_WIDTH = 320;
+const BELL_BASE = 92;
+
+/** A point on the same bell the board draws. y is smaller at the peak. */
+export function bellPoint(z: number): { x: number; y: number } {
+  const clamped = Math.min(3, Math.max(-3, z));
+  const x = BELL_PAD + ((clamped + 3) / 6) * (BELL_WIDTH - BELL_PAD * 2);
+  const y = BELL_BASE - Math.exp(-0.5 * clamped * clamped) * 78;
+  return { x, y };
+}
+
+/**
+ * Where the displayed "better than" percent sits on the bell.
+ * 50 is the peak. Lower percents sit on the left shoulder.
+ */
+export function curveMarker(percent: number): { x: number; y: number } {
+  const share = Math.min(0.995, Math.max(0.005, percent / 100));
+  return bellPoint(normalZ(share));
 }
 
 const NAME_RE = /^[A-Za-z0-9]+(?:[ .'-][A-Za-z0-9]+)*$/;

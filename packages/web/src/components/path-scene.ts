@@ -35,8 +35,25 @@ import { domeTexture, skinTexture, spriteTexture, tubeTexture } from "./look-tex
 
 export type PathScene = {
   update(state: PathDrawState): void;
+  /** PNG of the visible graph, word labels included. Null when the canvas is not ready. */
+  snapshot(): GraphShot | null;
   dispose(): void;
 };
+
+export type GraphShot = {
+  png: Blob;
+  dataUrl: string;
+};
+
+function blobFromDataUrl(dataUrl: string): Blob | null {
+  const comma = dataUrl.indexOf(",");
+  if (comma < 0) return null;
+  const mime = /^data:([^;,]+)/.exec(dataUrl.slice(0, comma))?.[1] ?? "image/png";
+  const binary = atob(dataUrl.slice(comma + 1));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
 
 const SERIF_FALLBACK = "Georgia, serif";
 const FOV = 40;
@@ -1148,6 +1165,34 @@ export function mountPathScene(gl: HTMLCanvasElement, labels: HTMLCanvasElement)
       syncPath(state);
       resize();
       requestRender();
+    },
+    snapshot() {
+      try {
+        if (disposed || !current || cssWidth < 2 || cssHeight < 2 || gl.width < 2 || gl.height < 2) {
+          return null;
+        }
+        // Read the pixels in this turn. The drawing buffer is discarded after the browser composites.
+        render();
+        const fraction = visibleWidth() / cssWidth;
+        const cropWidth = Math.max(1, Math.min(gl.width, Math.round(gl.width * fraction)));
+        const cropHeight = gl.height;
+        const out = document.createElement("canvas");
+        out.width = cropWidth;
+        out.height = cropHeight;
+        const ctx = out.getContext("2d");
+        if (!ctx) return null;
+        ctx.drawImage(gl, 0, 0, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+        if (labels.width > 0 && labels.height > 0) {
+          const labelWidth = Math.min(labels.width, Math.round(labels.width * fraction));
+          ctx.drawImage(labels, 0, 0, labelWidth, labels.height, 0, 0, cropWidth, cropHeight);
+        }
+        const dataUrl = out.toDataURL("image/png");
+        const png = blobFromDataUrl(dataUrl);
+        if (!png) return null;
+        return { png, dataUrl };
+      } catch {
+        return null;
+      }
     },
     dispose() {
       if (disposed) return;

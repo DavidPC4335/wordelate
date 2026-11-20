@@ -2,13 +2,14 @@ import dailyPuzzles from "../../public/puzzles.json" with { type: "json" };
 import { retentionStart } from "../lib/standings.js";
 import { decodePack } from "../lib/pack.js";
 import type { Pack } from "../lib/pack.js";
-import { mergePuzzles } from "../lib/puzzles.js";
+import { mergePuzzles, puzzleForDay } from "../lib/puzzles.js";
 import { calendarDay } from "../lib/storage.js";
 import { archiveExpiredDays } from "./archive.js";
 import { handleBoard } from "./handle.js";
 import type { Sql } from "./sql.js";
 
-const catalog = new Map(mergePuzzles(dailyPuzzles).map((puzzle) => [puzzle.id, puzzle]));
+const scheduled = mergePuzzles(dailyPuzzles);
+const catalog = new Map(scheduled.map((puzzle) => [puzzle.id, puzzle]));
 
 let packPromise: Promise<Pack> | null = null;
 
@@ -63,12 +64,14 @@ export default {
         console.error(JSON.stringify({ event: "pack", message: error instanceof Error ? error.message : "failed" }));
       }
     }
+    const now = Date.now();
     return handleBoard(request, {
       sql: d1sql(env.DB),
       secret: env.LEADERBOARD_SECRET,
-      now: () => Date.now(),
+      now: () => now,
       pack,
       puzzle: (id) => catalog.get(id) ?? null,
+      dailyPuzzleId: puzzleForDay(scheduled, calendarDay(new Date(now)))?.id ?? "",
     });
   },
   async scheduled(_controller, env, ctx): Promise<void> {

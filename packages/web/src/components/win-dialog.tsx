@@ -17,6 +17,8 @@ export type WinReport = {
   /** Looks this win unlocked. They are equipped already. */
   fresh: CosmeticId[];
   next: { cosmetic: Cosmetic; progress: UnlockProgress } | null;
+  /** Today's puzzle posts to the board. A past day does not. */
+  ranked: boolean;
 };
 
 function prefersReducedMotion(): boolean {
@@ -48,19 +50,15 @@ function useCountUp(target: number, run: boolean): number {
 export function WinDialog({
   open,
   report,
-  hasNext,
   shareNote,
   board,
-  onNext,
   onShare,
   onClose,
 }: {
   open: boolean;
   report: WinReport | null;
-  hasNext: boolean;
   shareNote: string | null;
   board: ComponentChildren;
-  onNext: () => void;
   onShare: () => void;
   onClose: () => void;
 }) {
@@ -71,10 +69,8 @@ export function WinDialog({
         <WinBody
           report={report}
           shown={shown}
-          hasNext={hasNext}
           shareNote={shareNote}
           board={board}
-          onNext={onNext}
           onShare={onShare}
           onClose={onClose}
         />
@@ -86,19 +82,15 @@ export function WinDialog({
 function WinBody({
   report,
   shown,
-  hasNext,
   shareNote,
   board,
-  onNext,
   onShare,
   onClose,
 }: {
   report: WinReport;
   shown: number;
-  hasNext: boolean;
   shareNote: string | null;
   board: ComponentChildren;
-  onNext: () => void;
   onShare: () => void;
   onClose: () => void;
 }) {
@@ -120,10 +112,14 @@ function WinBody({
         {report.par ? ` (par ${report.par})` : ""}
       </p>
 
-      <p class="win-points" aria-label={`${report.earned} points earned`}>
-        <StarIcon size={30} />
-        <span>+{shown}</span>
-      </p>
+      {report.ranked ? (
+        <p class="win-points" aria-label={`${report.earned} points earned`}>
+          <StarIcon size={30} />
+          <span>+{shown}</span>
+        </p>
+      ) : (
+        <p class="win-sub">Practice. This score stays off the board.</p>
+      )}
 
       {board}
 
@@ -171,9 +167,8 @@ function WinBody({
       )}
 
       <div class="win-actions">
-        <button type="button" class="btn btn-go" onClick={onNext} disabled={!hasNext}>
-          Next puzzle
-          <ArrowIcon size={20} />
+        <button type="button" class="btn btn-go" onClick={onClose}>
+          Done
         </button>
         <button type="button" class="btn btn-ghost" onClick={onShare}>
           <ShareIcon size={18} />

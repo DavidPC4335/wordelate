@@ -23,11 +23,19 @@ export type ReplayInput = {
   maxMoves: number;
 };
 
+export type ScoredStep = { op: "+" | "-"; word: string };
+
 export type ReplaySuccess = {
   ok: true;
   position: Float32Array;
   movesUsed: number;
+  /** Words still in the sum. An undo removes the last one. */
   equationWords: string[];
+  /**
+   * Every step that spent a move, including an undo as the inverse of the
+   * step it took back. +cat then undo is +cat −cat.
+   */
+  scoredSteps: ScoredStep[];
   similarity: number;
 };
 
@@ -54,18 +62,29 @@ export function replay(input: ReplayInput): ReplayResult {
   let position: Float32Array = new Float32Array(start);
   const undoStack: Float32Array[] = [];
   const equation: Applied[] = [];
+  const scoredSteps: ScoredStep[] = [];
   let movesUsed = 0;
+
+  const takeBack = (op: "+" | "-", word: string): ReplayFailure | null => {
+    if (equation.length === 0) return fail("Nothing to undo");
+    const previous = undoStack.pop();
+    const last = equation.pop();
+    if (previous === undefined || last === undefined) return fail("Nothing to undo");
+    if (last.word !== word || last.op === op) return fail("Nothing to undo");
+    position = previous;
+    scoredSteps.push({ op, word });
+    movesUsed += 1;
+    return null;
+  };
 
   for (const move of moves) {
     if (movesUsed + 1 > maxMoves) return fail("Move limit exceeded");
 
     if (move.op === "undo") {
-      if (equation.length === 0) return fail("Nothing to undo");
-      const previous = undoStack.pop();
-      equation.pop();
-      if (previous === undefined) return fail("Nothing to undo");
-      position = previous;
-      movesUsed += 1;
+      const last = equation[equation.length - 1];
+      if (!last) return fail("Nothing to undo");
+      const undone = takeBack(last.op === "+" ? "-" : "+", last.word);
+      if (undone) return undone;
       continue;
     }
 
@@ -80,6 +99,12 @@ export function replay(input: ReplayInput): ReplayResult {
     if (isBannedOperand(word, startWord, goalWord, banned)) {
       return fail("Banned operand");
     }
+    const last = equation[equation.length - 1];
+    if (last && last.word === word && last.op !== move.op) {
+      const undone = takeBack(move.op, word);
+      if (undone) return undone;
+      continue;
+    }
     if (equation.some((step) => step.word === word)) {
       return fail("Word already used");
     }
@@ -87,6 +112,7 @@ export function replay(input: ReplayInput): ReplayResult {
     undoStack.push(position);
     position = applyOp(position, vector, move.op);
     equation.push({ op: move.op, word });
+    scoredSteps.push({ op: move.op, word });
     movesUsed += 1;
   }
 
@@ -95,6 +121,7 @@ export function replay(input: ReplayInput): ReplayResult {
     position,
     movesUsed,
     equationWords: equation.map((step) => step.word),
+    scoredSteps,
     similarity: cosine(position, goal),
   };
 }

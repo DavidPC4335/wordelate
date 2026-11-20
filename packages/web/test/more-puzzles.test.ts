@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { customPuzzle, mergePuzzles, parsePuzzleFile } from "../src/lib/puzzles.js";
+import { customPuzzle, mergePuzzles, parsePuzzleFile, puzzleForDay, SCHEDULE_EPOCH } from "../src/lib/puzzles.js";
+import { shiftDay } from "../src/lib/standings.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const moreFile = resolve(here, "../src/lib/puzzles-more.json");
@@ -30,6 +31,13 @@ describe("more puzzles", () => {
     ]);
     expect(merged[0]?.accepted).toEqual(main[0]?.accepted);
     expect(merged.at(-1)?.accepted).toEqual(more.at(-1)?.accepted);
+  });
+
+  it("assigns one puzzle per day and keeps earlier days stable", () => {
+    const merged = mergePuzzles(JSON.parse(readFileSync(mainFile, "utf8")));
+    expect(puzzleForDay(merged, SCHEDULE_EPOCH)?.id).toBe(merged[0]?.id);
+    expect(puzzleForDay(merged, shiftDay(SCHEDULE_EPOCH, 1))?.id).toBe(merged[1]?.id);
+    expect(puzzleForDay(merged, shiftDay(SCHEDULE_EPOCH, -1))?.id).toBe(merged.at(-1)?.id);
   });
 
   it("builds a custom pair with no authored solution", () => {

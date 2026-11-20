@@ -59,10 +59,11 @@ export async function submitName(name: string): Promise<{ snapshot: BoardSnapsho
   }
 }
 
-export async function loadBoard(): Promise<BoardSnapshot | null> {
+export async function loadBoard(day?: string): Promise<BoardSnapshot | null> {
   try {
     await joinBoard();
-    const response = await fetch("/api/leaderboard", { credentials: "same-origin" });
+    const query = day ? `?day=${encodeURIComponent(day)}` : "";
+    const response = await fetch(`/api/leaderboard${query}`, { credentials: "same-origin" });
     return readSnapshot(response);
   } catch {
     return null;

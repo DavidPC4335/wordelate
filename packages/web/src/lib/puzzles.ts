@@ -1,5 +1,9 @@
 import type { AppliedStep } from "./game.js";
+import { daysBetween } from "./standings.js";
 import morePuzzles from "./puzzles-more.json" with { type: "json" };
+
+/** First scheduled day. Puzzle 0 is this date, then the list repeats in order. */
+export const SCHEDULE_EPOCH = "2026-11-20";
 
 export type Puzzle = {
   id: string;
@@ -109,6 +113,15 @@ export function customPuzzle(start: string, goal: string): Puzzle {
     here: goalWord,
     accepted: [],
   };
+}
+
+/** The puzzle scheduled for an Eastern calendar day. The list order is the schedule. */
+export function puzzleForDay(puzzles: readonly Puzzle[], day: string): Puzzle | null {
+  if (puzzles.length === 0) return null;
+  const delta = daysBetween(SCHEDULE_EPOCH, day);
+  if (delta == null) return null;
+  const index = ((delta % puzzles.length) + puzzles.length) % puzzles.length;
+  return puzzles[index] ?? null;
 }
 
 /** Daily puzzles plus the extra complex set. Accepted words stay on each row. */

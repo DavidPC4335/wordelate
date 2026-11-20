@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { betterThanPercent, cleanName, curvePlace, isDayKey, normalZ, retentionStart, shiftDay } from "../src/lib/standings.js";
+import { bellPoint, betterThanPercent, cleanName, curveMarker, curvePlace, dayParts, isDayKey, normalZ, retentionStart, shiftDay } from "../src/lib/standings.js";
 
 describe("board days", () => {
   it("keeps today and the six days before it", () => {
@@ -26,6 +26,21 @@ describe("curvePlace", () => {
   });
 });
 
+describe("curveMarker", () => {
+  it("puts the displayed percent on the bell, with 50 at the peak", () => {
+    const mid = curveMarker(50);
+    const low = curveMarker(25);
+    const high = curveMarker(75);
+    const peak = bellPoint(0);
+    expect(mid.x).toBeCloseTo(peak.x, 4);
+    expect(mid.y).toBeCloseTo(peak.y, 4);
+    expect(low.x).toBeLessThan(mid.x);
+    expect(high.x).toBeGreaterThan(mid.x);
+    expect(low.y).toBeGreaterThan(mid.y);
+    expect(high.y).toBeCloseTo(low.y, 4);
+  });
+});
+
 describe("normalZ", () => {
   it("places the middle of a bell at zero and the usual tails near 2", () => {
     expect(normalZ(0.5)).toBeCloseTo(0, 6);
@@ -44,5 +59,16 @@ describe("cleanName", () => {
     expect(cleanName("Anonymous!")).toBeNull();
     expect(cleanName("  ")).toBeNull();
     expect(cleanName("a".repeat(25))).toBeNull();
+  });
+});
+
+describe("dayParts", () => {
+  it("labels today and past days for the day strip", () => {
+    expect(dayParts("2026-11-20", "2026-11-20")).toEqual({ top: "Today", num: "20", long: "Friday, Nov 20" });
+    expect(dayParts("2026-11-19", "2026-11-20")).toEqual({ top: "Thu", num: "19", long: "Thursday, Nov 19" });
+  });
+
+  it("falls back to the raw text for a bad day", () => {
+    expect(dayParts("nope", "2026-11-20").top).toBe("nope");
   });
 });

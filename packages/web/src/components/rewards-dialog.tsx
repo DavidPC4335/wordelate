@@ -1,3 +1,4 @@
+import { useEffect, useState } from "preact/hooks";
 import { COSMETICS, isEarned, unlockProgress } from "../lib/rewards.js";
 import type { CosmeticId, RewardStats } from "../lib/rewards.js";
 import type { ScoreEntry } from "../lib/storage.js";
@@ -24,6 +25,7 @@ export function RewardsDialog({
   unlocked,
   equipped,
   onEquip,
+  onAdmin,
 }: {
   open: boolean;
   onClose: () => void;
@@ -33,8 +35,31 @@ export function RewardsDialog({
   unlocked: readonly CosmeticId[];
   equipped: CosmeticId;
   onEquip: (id: CosmeticId) => void;
+  onAdmin: () => void;
 }) {
   const recent = [...scores].reverse();
+  const [asking, setAsking] = useState(false);
+  const [code, setCode] = useState("");
+  const [denied, setDenied] = useState(false);
+
+  useEffect(() => {
+    if (open) return;
+    setAsking(false);
+    setCode("");
+    setDenied(false);
+  }, [open]);
+
+  function unlock(event: Event) {
+    event.preventDefault();
+    if (code.trim() === "debug123") {
+      setCode("");
+      setDenied(false);
+      setAsking(false);
+      onAdmin();
+      return;
+    }
+    setDenied(true);
+  }
   return (
     <Modal open={open} onClose={onClose} label="Rewards" variant="wide">
       <div class="panel">
@@ -129,6 +154,35 @@ export function RewardsDialog({
             ))}
           </ol>
         )}
+
+        <div class="admin-gate">
+          {asking ? (
+            <form class="admin-gate-form" onSubmit={unlock}>
+              <label class="sr-only" for="admin-code">
+                Admin code
+              </label>
+              <input
+                id="admin-code"
+                class="admin-gate-input"
+                type="password"
+                value={code}
+                autoComplete="off"
+                onInput={(event) => {
+                  setCode(event.currentTarget.value);
+                  setDenied(false);
+                }}
+              />
+              <button type="submit" class="btn btn-small">
+                Open
+              </button>
+            </form>
+          ) : (
+            <button type="button" class="admin-gate-button" onClick={() => setAsking(true)}>
+              admin?
+            </button>
+          )}
+          {denied ? <p class="admin-gate-error">That code is not right.</p> : null}
+        </div>
       </div>
     </Modal>
   );

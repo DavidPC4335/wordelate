@@ -1,4 +1,4 @@
-import { ArrowIcon, BoardIcon, FlameIcon, GearIcon, HelpIcon, StarIcon } from "./icons.js";
+import { ArrowIcon, BoardIcon, FlameIcon, HelpIcon, StarIcon } from "./icons.js";
 
 /** The question. Always in the header so the player never loses track of the goal. */
 function Question({ start, goal }: { start: string; goal: string }) {
@@ -16,21 +16,17 @@ export function TopBar({
   goal,
   streak,
   points,
-  adminOpen,
   onRewards,
   onBoard,
   onHelp,
-  onAdmin,
 }: {
   start: string | null;
   goal: string | null;
   streak: number;
   points: number;
-  adminOpen: boolean;
   onRewards: () => void;
   onBoard: () => void;
   onHelp: () => void;
-  onAdmin: () => void;
 }) {
   return (
     <header class="topbar">
@@ -62,17 +58,6 @@ export function TopBar({
         </button>
         <button type="button" class="icon-btn" onClick={onHelp} aria-label="How to play" title="How to play">
           <HelpIcon size={20} />
-        </button>
-        <button
-          type="button"
-          class="icon-btn"
-          onClick={onAdmin}
-          aria-label="Admin"
-          aria-haspopup="dialog"
-          aria-expanded={adminOpen}
-          title="Admin"
-        >
-          <GearIcon size={20} />
         </button>
       </div>
     </header>

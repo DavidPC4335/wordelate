@@ -44,6 +44,10 @@ describe("replay", () => {
     if (!result.ok) return;
     expect(result.movesUsed).toBe(2);
     expect(result.equationWords).toEqual([]);
+    expect(result.scoredSteps).toEqual([
+      { op: "+", word: "cat" },
+      { op: "-", word: "cat" },
+    ]);
     expect(Array.from(result.position)).toEqual([1, 0, 0]);
     expect(result.similarity).toBe(cosine(start, goal));
     expect(Array.from(start)).toEqual(startCopy);
@@ -52,11 +56,27 @@ describe("replay", () => {
   it("rejects a second use of a word that is still on the equation", () => {
     const result = play([
       { op: "+", word: "cat" },
-      { op: "-", word: "cat" },
+      { op: "+", word: "cat" },
     ]);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toBe("Word already used");
+  });
+
+  it("records the inverse of the last step as an undo", () => {
+    const result = play([
+      { op: "+", word: "cat" },
+      { op: "-", word: "cat" },
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.movesUsed).toBe(2);
+    expect(result.equationWords).toEqual([]);
+    expect(result.scoredSteps).toEqual([
+      { op: "+", word: "cat" },
+      { op: "-", word: "cat" },
+    ]);
+    expect(Array.from(result.position)).toEqual([1, 0, 0]);
   });
 
   it("allows the same word again after it has been undone", () => {
@@ -69,6 +89,11 @@ describe("replay", () => {
     if (!result.ok) return;
     expect(result.movesUsed).toBe(3);
     expect(result.equationWords).toEqual(["cat"]);
+    expect(result.scoredSteps).toEqual([
+      { op: "+", word: "cat" },
+      { op: "-", word: "cat" },
+      { op: "+", word: "cat" },
+    ]);
     expect(Array.from(result.position)).toEqual([1, 1, 0]);
   });
 

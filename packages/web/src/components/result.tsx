@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { ArrowIcon, ShareIcon } from "./icons.js";
+import { ShareIcon } from "./icons.js";
 
 /**
  * What sits under the move box. While playing it holds a careful Give up.
@@ -11,9 +11,7 @@ export function Result({
   revealed,
   outOfMoves,
   solution,
-  hasNext,
   onGiveUp,
-  onNext,
   onRetry,
   onShare,
   shareNote,
@@ -23,9 +21,7 @@ export function Result({
   revealed: boolean;
   outOfMoves: boolean;
   solution: string | null;
-  hasNext: boolean;
   onGiveUp: () => void;
-  onNext: () => void;
   onRetry: () => void;
   onShare: () => void;
   shareNote: string | null;
@@ -53,21 +49,11 @@ export function Result({
       <div class="result-actions">
         {finished ? (
           <>
-            {won ? (
-              <button type="button" class="btn btn-go" onClick={onNext} disabled={!hasNext}>
-                Next puzzle
-                <ArrowIcon size={20} />
-              </button>
-            ) : (
+            {won ? null : (
               <button type="button" class="btn btn-go" onClick={onRetry}>
                 Try again
               </button>
             )}
-            {won ? null : hasNext ? (
-              <button type="button" class="btn btn-ghost" onClick={onNext}>
-                Skip to next
-              </button>
-            ) : null}
             <button type="button" class="btn btn-ghost" onClick={onShare}>
               <ShareIcon size={18} />
               Share

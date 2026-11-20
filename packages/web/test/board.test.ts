@@ -67,7 +67,8 @@ function harness(limits?: BoardLimits): { deps: BoardDeps; clock: { now: number 
     secret: SECRET,
     now: () => clock.now,
     pack: vectors(),
-    puzzle: (id) => (id === puzzle.id ? puzzle : null),
+    puzzle: (id) => (id === puzzle.id || id === "side-quest" ? { ...puzzle, id } : null),
+    dailyPuzzleId: puzzle.id,
     limits,
   };
   return { deps, clock, sql };
@@ -148,6 +149,31 @@ describe("daily board", () => {
     expect(later.you).toMatchObject({ rank: 2, betterThan: 0 });
     expect(later.top[0]?.betterThan).toBe(0);
     expect(later.top[1]?.rank).toBe(2);
+  });
+
+  it("counts an undone step in the score", async () => {
+    const { deps } = harness();
+    const cookie = await session(deps);
+    const scored = await snapshot(
+      await post(deps, "/api/score", {
+        puzzleId: "alpha-omega",
+        steps: [
+          { op: "+", word: "hop" },
+          { op: "-", word: "hop" },
+          { op: "+", word: "bridge" },
+        ],
+      }, cookie),
+    );
+    expect(scored.submitted).toEqual({ score: 130, counted: true });
+    expect(scored.top[0]?.answer).toBe("alpha + hop − hop + bridge");
+    expect(scored.top[0]?.moves).toBe(3);
+  });
+
+  it("refuses a score for a puzzle that is not today's", async () => {
+    const { deps } = harness();
+    const cookie = await session(deps);
+    const refused = await post(deps, "/api/score", { puzzleId: "side-quest", steps: [{ op: "+", word: "bridge" }] }, cookie);
+    expect(refused.status).toBe(400);
   });
 
   it("keeps a better score and an earlier time, then asks the top five for a name", async () => {

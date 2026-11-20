@@ -8,7 +8,12 @@ import {
   countsAsWin,
   hereAtPosition,
   progressTowardGoal,
+  formatEquation,
+  shareHtml,
+  shareMessage,
   shareText,
+  shouldUseShareSheet,
+  WORD_ELATE_URL,
 } from "../src/lib/game.js";
 import { parsePuzzleFile } from "../src/lib/puzzles.js";
 
@@ -131,16 +136,54 @@ describe("progress meter", () => {
 });
 
 describe("share text", () => {
-  it("omits operand words", () => {
+  it("puts the equation under the summary", () => {
+    const equation = formatEquation("king", [
+      { op: "+", word: "man" },
+      { op: "-", word: "woman" },
+    ]);
     const text = shareText({
       start: "king",
       goal: "queen",
       movesUsed: 2,
       similarity: 0.71199,
+      equation,
     });
-    expect(text).toBe("Wordelate king→queen · 2/16 · 71.2%");
-    expect(text.includes("man")).toBe(false);
-    expect(text.includes("woman")).toBe(false);
+    expect(text).toBe(`Wordelate king→queen · 2/16 · 71.2%\n${equation}`);
+    expect(text).toContain("man");
+    expect(text).toContain("woman");
+  });
+
+  it("stays a single line before any words are used", () => {
+    const text = shareText({
+      start: "king",
+      goal: "queen",
+      movesUsed: 0,
+      similarity: 0.16,
+      equation: "   ",
+    });
+    expect(text).toBe("Wordelate king→queen · 0/16 · 16%");
+  });
+
+  it("escapes the words and embeds the graph for a rich paste", () => {
+    const html = shareHtml('king < queen\nking + "man"', "data:image/png;base64,abc");
+    expect(html).toContain("king &lt; queen<br>king + &quot;man&quot;");
+    expect(html).toContain('src="data:image/png;base64,abc"');
+    expect(shareHtml("king→queen", null)).toBe("<p>king→queen</p>");
+  });
+
+  it("adds the wordelate link under the result", () => {
+    const message = shareMessage("Wordelate king→queen · 2/16 · 71.2%\nking + man − woman");
+    expect(message.endsWith(`\n\n${WORD_ELATE_URL}`)).toBe(true);
+    expect(message).toContain("king + man − woman");
+  });
+});
+
+describe("share sheet", () => {
+  it("opens on a touch device that has no hover", () => {
+    expect(shouldUseShareSheet({ shareApi: true, coarsePointer: true, hoverNone: true })).toBe(true);
+    expect(shouldUseShareSheet({ shareApi: true, coarsePointer: false, hoverNone: true })).toBe(false);
+    expect(shouldUseShareSheet({ shareApi: true, coarsePointer: true, hoverNone: false })).toBe(false);
+    expect(shouldUseShareSheet({ shareApi: false, coarsePointer: true, hoverNone: true })).toBe(false);
   });
 });
 
@@ -162,9 +205,21 @@ describe("moves", () => {
     const first = commitMove(input, { op: "+", word: "cat" });
     expect(first.ok).toBe(true);
     if (!first.ok) return;
-    const second = commitMove({ ...input, moves: first.moves }, { op: "-", word: "cat" });
-    expect(second.ok).toBe(false);
-    if (second.ok) return;
-    expect(second.error).toBe("Word already used");
+    const inverse = commitMove({ ...input, moves: first.moves }, { op: "-", word: "cat" });
+    expect(inverse.ok).toBe(true);
+    if (!inverse.ok) return;
+    expect(inverse.result.movesUsed).toBe(2);
+    expect(inverse.result.equationWords).toEqual([]);
+    expect(inverse.result.scoredSteps).toEqual([
+      { op: "+", word: "cat" },
+      { op: "-", word: "cat" },
+    ]);
+    const repeated = commitMove(input, { op: "+", word: "cat" });
+    expect(repeated.ok).toBe(true);
+    if (!repeated.ok) return;
+    const again = commitMove({ ...input, moves: repeated.moves }, { op: "+", word: "cat" });
+    expect(again.ok).toBe(false);
+    if (again.ok) return;
+    expect(again.error).toBe("Word already used");
   });
 });

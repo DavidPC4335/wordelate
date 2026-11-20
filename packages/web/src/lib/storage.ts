@@ -179,7 +179,7 @@ export type StreakState = {
   lastDay: string | null;
 };
 
-/** 160 points, minus 10 for each applied move, never below 0. */
+/** 160 points, minus 10 for each move, including an undo. Never below 0. */
 export function scoreForMoves(moves: number): number {
   if (!Number.isFinite(moves) || moves <= 0) return 160;
   return Math.max(0, 160 - 10 * moves);

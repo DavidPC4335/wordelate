@@ -4,11 +4,13 @@ import type { Move } from "@wordelate/game-math";
 import { cosine, replay } from "@wordelate/game-math";
 import { Admin } from "./components/admin.js";
 import { BoardDialog } from "./components/board-dialog.js";
+import type { BoardDay } from "./components/board-dialog.js";
 import { Equation } from "./components/equation.js";
 import { HowToPlay } from "./components/how-to-play.js";
 import { Meter } from "./components/meter.js";
 import { MoveForm } from "./components/move-form.js";
 import { PathView } from "./components/path-view.js";
+import type { GraphShot } from "./components/path-view.js";
 import { Result } from "./components/result.js";
 import { RewardsDialog } from "./components/rewards-dialog.js";
 import { StatusBar } from "./components/status-bar.js";
@@ -16,7 +18,8 @@ import { TopBar } from "./components/top-bar.js";
 import { StandingsView } from "./components/standings-view.js";
 import { WinDialog } from "./components/win-dialog.js";
 import type { WinReport } from "./components/win-dialog.js";
-import { joinBoard, submitName, submitScore } from "./lib/board-api.js";
+import { joinBoard, loadBoard, submitName, submitScore } from "./lib/board-api.js";
+import { recentDays } from "./lib/standings.js";
 import type { BoardSnapshot } from "./lib/standings.js";
 import {
   MAX_MOVES,
@@ -29,11 +32,15 @@ import {
   progressTowardGoal,
   LABEL_NEAR_DUPLICATE_CUTOFF,
   LABEL_WARM_SIMILARITY,
+  shareHtml,
+  shareMessage,
   shareText,
+  shouldUseShareSheet,
+  WORD_ELATE_URL,
 } from "./lib/game.js";
 import { closestWord, loadPack, nearestLabels, rowFor } from "./lib/pack.js";
 import type { Pack, PackProgress } from "./lib/pack.js";
-import { customPuzzle, mergePuzzles } from "./lib/puzzles.js";
+import { customPuzzle, mergePuzzles, puzzleForDay } from "./lib/puzzles.js";
 import type { Puzzle } from "./lib/puzzles.js";
 import { COSMETICS, nextReward } from "./lib/rewards.js";
 import type { CosmeticId } from "./lib/rewards.js";
@@ -44,7 +51,6 @@ import {
   hasGameHistory,
   loadGame,
   readHowToSeen,
-  readLastPuzzle,
   readLook,
   readScores,
   readStreak,
@@ -53,9 +59,7 @@ import {
   scoreForMoves,
   streakAsOf,
   syncUnlocked,
-  totalScore,
   writeHowToSeen,
-  writeLastPuzzle,
   unlockAllLooks,
   writeLook,
 } from "./lib/storage.js";
@@ -86,6 +90,88 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.length > 0 ? error.message : fallback;
 }
 
+function shareAborted(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+function mediaMatches(query: string): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia(query).matches;
+}
+
+/** The system share sheet: result text, the graph when the device accepts a file, and the game link. */
+async function presentShareSheet(text: string, capture: () => GraphShot | null): Promise<void> {
+  const data: ShareData = {
+    title: "Wordelate",
+    text,
+    url: WORD_ELATE_URL,
+  };
+  let shot: GraphShot | null = null;
+  try {
+    shot = capture();
+  } catch {
+    shot = null;
+  }
+  if (shot) {
+    const file = new File([shot.png], "wordelate.png", { type: "image/png" });
+    const withFile: ShareData = { ...data, files: [file] };
+    if (typeof navigator.canShare !== "function" || navigator.canShare(withFile)) {
+      try {
+        await navigator.share(withFile);
+        return;
+      } catch (error) {
+        if (shareAborted(error)) throw error;
+      }
+    }
+  }
+  await navigator.share(data);
+}
+
+/**
+ * Text plus a graph picture when the browser can hold both. Falls back to the words alone.
+ * The clipboard request starts before the picture is encoded, so the click still counts.
+ */
+function copyShare(text: string, capture: () => GraphShot | null): Promise<void> {
+  const clipboard = navigator.clipboard;
+  if (!clipboard) return Promise.reject(new Error("Clipboard unavailable"));
+  const plain = new Blob([text], { type: "text/plain" });
+  const writeText = () => clipboard.writeText(text);
+  if (typeof ClipboardItem === "undefined" || !clipboard.write) return writeText();
+  try {
+    let take: () => void = () => {};
+    const shot = new Promise<GraphShot | null>((resolve) => {
+      take = () => {
+        try {
+          resolve(capture());
+        } catch {
+          resolve(null);
+        }
+      };
+    });
+    const png = shot.then((image) => {
+      if (!image) throw new Error("No graph");
+      return image.png;
+    });
+    const html = shot.then((image) => new Blob([shareHtml(text, image?.dataUrl ?? null)], { type: "text/html" }));
+    const rich = new ClipboardItem({
+      "text/plain": plain,
+      "text/html": html,
+      "image/png": png,
+    });
+    const imageAndText = new ClipboardItem({
+      "text/plain": plain,
+      "image/png": png,
+    });
+    const pending = clipboard
+      .write([rich])
+      .catch(() => clipboard.write([imageAndText]))
+      .catch(() => writeText());
+    take();
+    return pending;
+  } catch {
+    return writeText();
+  }
+}
+
 function positionKey(puzzleId: string, moves: readonly Move[]): string {
   let key = puzzleId;
   for (const move of moves) {
@@ -113,9 +199,8 @@ export function App() {
   const [gaveUp, setGaveUp] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
-  const [adminOpen, setAdminOpen] = useState(
-    () => new URLSearchParams(window.location.search).get("admin") === "1",
-  );
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [archiveDay, setArchiveDay] = useState<string | null>(null);
   // The tutorial greets a brand-new player once. Closing it, or playing, ends the greeting.
   const [howToOpen, setHowToOpen] = useState(() => !hasGameHistory() && !readHowToSeen());
   const [rewardsOpen, setRewardsOpen] = useState(false);
@@ -134,6 +219,7 @@ export function App() {
   const [streakState, setStreakState] = useState<StreakState>(() => readStreak());
   const scanGeneration = useRef(0);
   const shownProgress = useRef(0);
+  const graphShot = useRef<(() => GraphShot | null) | null>(null);
   // A win only scores when the player made a move on this puzzle in this session.
   // A board that was already won when it was opened never scores again.
   const armedPuzzle = useRef<string | null>(null);
@@ -174,13 +260,7 @@ export function App() {
         if (cancel) return;
         const first = list[0];
         if (!first) throw new Error("Puzzle list is empty");
-        // Pick up where the player left off, else the first puzzle they have not solved.
-        const solved = new Set(readScores().map((entry) => entry.puzzleId));
-        const remembered = readLastPuzzle();
-        const pick =
-          list.find((item) => item.id === remembered) ??
-          list.find((item) => !solved.has(item.id)) ??
-          first;
+        const pick = puzzleForDay(list, calendarDay(new Date())) ?? first;
         const saved = loadGame(pick.id);
         setPuzzles(list);
         setPuzzleId(pick.id);
@@ -225,10 +305,6 @@ export function App() {
     if (!hydrated || !puzzle) return;
     saveGame(puzzle.id, { moves, gaveUp });
   }, [hydrated, puzzle, moves, gaveUp]);
-
-  useEffect(() => {
-    if (hydrated && puzzleId && !custom) writeLastPuzzle(puzzleId);
-  }, [custom, hydrated, puzzleId]);
 
   useEffect(() => {
     if (!pack || !puzzle || !played || !played.ok) {
@@ -294,54 +370,68 @@ export function App() {
   useEffect(() => {
     if (!hydrated || !puzzle || !played || !played.ok || !won || gaveUp) return;
     if (armedPuzzle.current !== puzzle.id) return;
-    const movesUsed = played.equationWords.length;
-    if (movesUsed < 1) return;
+    const movesUsed = played.scoredSteps.length;
+    if (movesUsed < 1 || played.equationWords.length < 1) return;
     armedPuzzle.current = null;
-    const recorded = recordWin({
-      puzzleId: puzzle.id,
-      moves: movesUsed,
-      day: calendarDay(new Date()),
-    });
-    setScoreLog(recorded.scores);
-    setStreakState(recorded.streak);
-    const stats = { totalPoints: totalScore(recorded.scores), bestStreak: recorded.bestStreak };
-    const synced = syncUnlocked(stats);
-    const newest = synced.fresh[synced.fresh.length - 1];
-    // A new look goes on straight away, so the graph itself is the surprise.
+    const todayKey = calendarDay(new Date());
+    const todayPuzzle = puzzles ? puzzleForDay(puzzles, todayKey) : null;
+    const ranked = todayPuzzle != null && puzzle.id === todayPuzzle.id;
+    const recorded = ranked
+      ? recordWin({ puzzleId: puzzle.id, moves: movesUsed, day: todayKey })
+      : null;
+    if (recorded) {
+      setScoreLog(recorded.scores);
+      setStreakState(recorded.streak);
+    }
+    const scores = recorded?.scores ?? scoreLog;
+    const streak = recorded?.streak ?? streakState;
+    const stats = currentRewardStats(scores, streak);
+    const synced = ranked ? syncUnlocked(stats) : null;
+    const newest = synced?.fresh[synced.fresh.length - 1];
     if (newest) writeLook(newest);
-    setRewards((before) => ({ unlocked: synced.unlocked, look: newest ?? before.look }));
+    if (synced) setRewards((before) => ({ unlocked: synced.unlocked, look: newest ?? before.look }));
     setWinReport({
       start: puzzle.start,
       goal: puzzle.goal,
       moves: movesUsed,
       par: puzzle.par > 0 ? puzzle.par : null,
-      earned: recorded.earned,
+      earned: recorded?.earned ?? 0,
       totalPoints: stats.totalPoints,
-      streak: recorded.streak.count,
-      fresh: synced.fresh,
+      streak: streakAsOf(streak, todayKey),
+      fresh: synced?.fresh ?? [],
       next: nextReward(stats),
+      ranked,
     });
-    if (puzzle.id.startsWith("custom-")) {
-      setBoard(null);
-      setBoardState("off");
-    } else {
+    if (ranked) {
       const generation = boardGeneration.current + 1;
       boardGeneration.current = generation;
       setBoard(null);
       setBoardState("loading");
-      const steps = appliedSteps(moves);
-      void submitScore({ puzzleId: puzzle.id, steps }).then((snapshot) => {
+      void submitScore({ puzzleId: puzzle.id, steps: played.scoredSteps }).then((snapshot) => {
         if (boardGeneration.current !== generation) return;
         setBoard(snapshot);
         setBoardState(snapshot ? "ready" : "error");
       });
+    } else if (archiveDay) {
+      const generation = boardGeneration.current + 1;
+      boardGeneration.current = generation;
+      setBoard(null);
+      setBoardState("loading");
+      void loadBoard(archiveDay).then((snapshot) => {
+        if (boardGeneration.current !== generation) return;
+        setBoard(snapshot);
+        setBoardState(snapshot ? "ready" : "error");
+      });
+    } else {
+      setBoard(null);
+      setBoardState("off");
     }
     try {
       navigator.vibrate?.([30, 50, 30]);
     } catch {
       // Vibration is a nicety. Some browsers refuse it.
     }
-  }, [gaveUp, hydrated, moves, played, puzzle, won]);
+  }, [archiveDay, gaveUp, hydrated, moves, played, puzzle, puzzles, scoreLog, streakState, won]);
 
   // Let the graph's own sparkle play for a moment before the results card opens.
   useEffect(() => {
@@ -387,6 +477,17 @@ export function App() {
     startBoard(puzzle.id, null);
   }
 
+  function playDay(day: string) {
+    if (!puzzles) return;
+    const todayKey = calendarDay(new Date());
+    const scheduled = puzzleForDay(puzzles, day);
+    if (!scheduled) return;
+    setCustom(null);
+    setArchiveDay(day === todayKey ? null : day);
+    startBoard(scheduled.id, loadGame(scheduled.id));
+    setBoardOpen(false);
+  }
+
   function playPair(startRaw: string, goalRaw: string): string | null {
     if (!pack || !puzzles) return "Vocabulary is still loading.";
     const start = closestWord(pack, startRaw);
@@ -401,6 +502,7 @@ export function App() {
       saveGame(made.id, { moves: [], gaveUp: false });
       startBoard(made.id, null);
     }
+    setArchiveDay(null);
     setAdminOpen(false);
     return null;
   }
@@ -436,40 +538,51 @@ export function App() {
 
   async function share() {
     if (!puzzle || !played || !played.ok) return;
+    const used = appliedSteps(moves);
     const text = shareText({
       start: puzzle.start,
       goal: puzzle.goal,
       movesUsed: played.movesUsed,
       similarity: shownProgress.current,
+      equation: used.length > 0 ? formatEquation(puzzle.start, used) : "",
     });
+    const capture = () => graphShot.current?.() ?? null;
+    if (
+      shouldUseShareSheet({
+        shareApi: typeof navigator.share === "function",
+        coarsePointer: mediaMatches("(pointer: coarse)"),
+        hoverNone: mediaMatches("(hover: none)"),
+      })
+    ) {
+      try {
+        await presentShareSheet(text, capture);
+        setShareNote("Shared!");
+        return;
+      } catch (error) {
+        if (shareAborted(error)) return;
+      }
+    }
     try {
-      await navigator.clipboard.writeText(text);
-      setShareNote(`Copied: ${text}`);
+      await copyShare(shareMessage(text), capture);
+      setShareNote("Copied!");
     } catch {
-      setShareNote(text);
+      setShareNote("Couldn't copy");
     }
   }
 
-  const streakCount = streakAsOf(streakState, calendarDay(new Date()));
+  const todayKey = calendarDay(new Date());
+  const streakCount = streakAsOf(streakState, todayKey);
   const rewardStats = useMemo(() => currentRewardStats(scoreLog, streakState), [scoreLog, streakState]);
   const solvedIds = useMemo(() => new Set(scoreLog.map((entry) => entry.puzzleId)), [scoreLog]);
-
-  /** The next puzzle in list order that is not solved yet. Falls back to simply the next one. */
-  function nextPuzzleId(): string | null {
-    if (!puzzles || puzzles.length === 0) return null;
-    const at = puzzles.findIndex((item) => item.id === puzzleId);
-    for (let step = 1; step <= puzzles.length; step++) {
-      const candidate = puzzles[(Math.max(at, -1) + step) % puzzles.length];
-      if (candidate && candidate.id !== puzzleId && !solvedIds.has(candidate.id)) return candidate.id;
+  const boardDays = useMemo<BoardDay[]>(() => {
+    if (!puzzles) return [];
+    const days: BoardDay[] = [];
+    for (const day of recentDays(todayKey)) {
+      const scheduled = puzzleForDay(puzzles, day);
+      if (scheduled) days.push({ day, puzzle: scheduled });
     }
-    const plain = puzzles[(Math.max(at, -1) + 1) % puzzles.length];
-    return plain && plain.id !== puzzleId ? plain.id : null;
-  }
-
-  function playNext() {
-    const id = nextPuzzleId();
-    if (id) openPuzzle(id);
-  }
+    return days;
+  }, [puzzles, todayKey]);
 
   function closeHowTo() {
     setHowToOpen(false);
@@ -484,11 +597,9 @@ export function App() {
           goal={puzzle?.goal ?? null}
           streak={streakCount}
           points={rewardStats.totalPoints}
-          adminOpen={adminOpen}
           onRewards={() => setRewardsOpen(true)}
           onBoard={() => setBoardOpen(true)}
           onHelp={() => setHowToOpen(true)}
-          onAdmin={() => setAdminOpen((open) => !open)}
         />
         {body}
         <Admin
@@ -499,6 +610,7 @@ export function App() {
           solvedIds={solvedIds}
           revealed={revealed}
           onSelect={(id) => {
+            setArchiveDay(null);
             openPuzzle(id);
             setAdminOpen(false);
           }}
@@ -529,29 +641,43 @@ export function App() {
             writeLook(id);
             setRewards((before) => ({ ...before, look: id }));
           }}
+          onAdmin={() => {
+            setRewardsOpen(false);
+            setAdminOpen(true);
+          }}
         />
         <HowToPlay open={howToOpen} onClose={closeHowTo} />
-        <BoardDialog open={boardOpen} onClose={() => setBoardOpen(false)} />
+        <BoardDialog
+          open={boardOpen}
+          onClose={() => setBoardOpen(false)}
+          today={todayKey}
+          days={boardDays}
+          playingDay={archiveDay ?? todayKey}
+          onPlay={playDay}
+        />
         <WinDialog
           open={winOpen}
           report={winReport}
-          hasNext={nextPuzzleId() !== null}
           shareNote={shareNote}
           board={
             <StandingsView
               snapshot={board}
               state={boardState}
-              onName={async (name) => {
-                const result = await submitName(name);
-                if (result.snapshot) {
-                  setBoard(result.snapshot);
-                  setBoardState("ready");
-                }
-                return result.error;
-              }}
+              today={winReport?.ranked !== false}
+              onName={
+                winReport?.ranked === false
+                  ? undefined
+                  : async (name) => {
+                      const result = await submitName(name);
+                      if (result.snapshot) {
+                        setBoard(result.snapshot);
+                        setBoardState("ready");
+                      }
+                      return result.error;
+                    }
+              }
             />
           }
-          onNext={playNext}
           onShare={() => {
             void share();
           }}
@@ -638,19 +764,28 @@ export function App() {
             similarity={played.similarity}
             won={won}
             lookId={rewards.look}
+            captureRef={graphShot}
           />
         ) : null}
         <p class="stage-hint">Drag the graph to look around</p>
       </main>
       <section class="dock" aria-label="Your moves">
         <div class="dock-inner" data-stage-overlay>
+          {archiveDay ? (
+            <p class="practice-banner">
+              Practice. This score stays off the board.
+              <button type="button" class="text-button" onClick={() => playDay(todayKey)}>
+                Back to today
+              </button>
+            </p>
+          ) : null}
           <Equation start={puzzle.start} steps={steps} />
           <Meter key={`${puzzle.id}:${formKey}`} progress={progress} won={won} />
           <StatusBar
             movesUsed={played.movesUsed}
             maxMoves={MAX_MOVES}
             par={puzzle.par > 0 ? puzzle.par : null}
-            worth={scoreForMoves(steps.length + 1)}
+            worth={scoreForMoves(played.movesUsed + 1)}
           />
           <MoveForm
             key={formKey}
@@ -671,12 +806,10 @@ export function App() {
             revealed={revealed}
             outOfMoves={outOfMoves}
             solution={solution}
-            hasNext={nextPuzzleId() !== null}
             onGiveUp={() => {
               setGaveUp(true);
               setRevealed(true);
             }}
-            onNext={playNext}
             onRetry={resetPuzzle}
             onShare={() => {
               void share();

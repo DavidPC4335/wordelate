@@ -42,6 +42,8 @@ export type BoardDeps = {
   now: () => number;
   pack: Pack | null;
   puzzle: (id: string) => Puzzle | null;
+  /** Only this puzzle can post a score. Past days are for practice. */
+  dailyPuzzleId: string;
   limits?: BoardLimits;
 };
 
@@ -142,6 +144,9 @@ async function snapshotFor(
       moves: row.moves,
       puzzle: formatPuzzle(row.answer),
       answer: formatBoardAnswer(row.answer),
+      start: row.answer.start,
+      goal: row.answer.goal,
+      steps: row.answer.steps,
       betterThan: betterThanPercent(below, total),
       place: curvePlace(below, tied, total),
     };
@@ -212,6 +217,7 @@ export async function handleBoard(request: Request, deps: BoardDeps): Promise<Re
     if (!("steps" in parsed)) return fail(parsed.status, parsed.error);
     const puzzle = deps.puzzle(parsed.puzzleId);
     if (!puzzle) return fail(404, "That puzzle is not on the board.");
+    if (parsed.puzzleId !== deps.dailyPuzzleId) return fail(400, "That puzzle is not today's.");
     if (!deps.pack) return fail(503, "The board is unavailable.");
     const verified = await verifySolution(deps.pack, puzzle, parsed.steps);
     if (!verified) return fail(400, "That solution does not score.");

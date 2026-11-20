@@ -8,8 +8,13 @@ import { projectTo3 } from "../lib/project.js";
 import { cosmeticFor, skyGradient } from "../lib/rewards.js";
 import type { CosmeticId } from "../lib/rewards.js";
 
+import type { GraphShot as SceneGraphShot } from "./path-scene.js";
+
+export type GraphShot = SceneGraphShot;
+
 type PathSceneHandle = {
   update(state: PathDrawState): void;
+  snapshot(): GraphShot | null;
   dispose(): void;
 };
 
@@ -82,6 +87,7 @@ export function PathView({
   similarity,
   won,
   lookId,
+  captureRef,
 }: {
   pack: Pack;
   start: Float32Array;
@@ -93,6 +99,7 @@ export function PathView({
   similarity: number;
   won: boolean;
   lookId: CosmeticId;
+  captureRef?: { current: (() => GraphShot | null) | null };
 }) {
   const [failed, setFailed] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
@@ -183,6 +190,14 @@ export function PathView({
   useEffect(() => {
     sceneRef.current?.update(drawState);
   }, [drawState]);
+
+  useEffect(() => {
+    if (!captureRef) return;
+    captureRef.current = () => sceneRef.current?.snapshot() ?? null;
+    return () => {
+      captureRef.current = null;
+    };
+  }, [captureRef]);
 
   useEffect(() => {
     if (atStart || won) return;

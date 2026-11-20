@@ -43,15 +43,51 @@ export function progressTowardGoal(input: {
   return Math.min(1, Math.max(0, raw));
 }
 
-/** Share line. Operand words are not part of the text. */
+/** Public game address. The share sheet attaches this so the link sits in the message. */
+export const WORD_ELATE_URL = "https://wordelate.com/";
+
+/** Share text: the summary line, then the equation when the player has used any words. */
 export function shareText(input: {
   start: string;
   goal: string;
   movesUsed: number;
   similarity: number;
+  equation: string;
 }): string {
   const percent = formatPercent(input.similarity);
-  return `Wordelate ${input.start}→${input.goal} · ${input.movesUsed}/${MAX_MOVES} · ${percent}%`;
+  const head = `Wordelate ${input.start}→${input.goal} · ${input.movesUsed}/${MAX_MOVES} · ${percent}%`;
+  const equation = input.equation.trim();
+  if (equation.length === 0) return head;
+  return `${head}\n${equation}`;
+}
+
+/** Clipboard text. The share sheet sends the same words and attaches the link itself. */
+export function shareMessage(text: string): string {
+  return `${text}\n\n${WORD_ELATE_URL}`;
+}
+
+/** Phones and tablets open the system share sheet. A desktop pointer keeps the clipboard. */
+export function shouldUseShareSheet(input: {
+  shareApi: boolean;
+  coarsePointer: boolean;
+  hoverNone: boolean;
+}): boolean {
+  return input.shareApi && input.coarsePointer && input.hoverNone;
+}
+
+/** Rich paste: the same words, plus the graph when a picture is available. */
+export function shareHtml(text: string, imageSrc: string | null): string {
+  const lines = escapeHtml(text).replaceAll("\n", "<br>");
+  if (!imageSrc) return `<p>${lines}</p>`;
+  return `<p>${lines}</p><img src="${escapeHtml(imageSrc)}" alt="Graph">`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 /** Hide a label this close to the start word or any single operand. Not shown. */
