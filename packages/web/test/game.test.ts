@@ -12,7 +12,7 @@ import {
   shareHtml,
   shareMessage,
   shareText,
-  shouldUseShareSheet,
+  shareDate,
   WORD_ELATE_URL,
 } from "../src/lib/game.js";
 import { parsePuzzleFile } from "../src/lib/puzzles.js";
@@ -136,54 +136,57 @@ describe("progress meter", () => {
 });
 
 describe("share text", () => {
-  it("puts the equation under the summary", () => {
-    const equation = formatEquation("king", [
-      { op: "+", word: "man" },
-      { op: "-", word: "woman" },
-    ]);
-    const text = shareText({
-      start: "king",
-      goal: "queen",
-      movesUsed: 2,
-      similarity: 0.71199,
-      equation,
-    });
-    expect(text).toBe(`Wordelate king→queen · 2/16 · 71.2%\n${equation}`);
-    expect(text).toContain("man");
-    expect(text).toContain("woman");
+  const base = {
+    day: "2026-11-20",
+    start: "paris",
+    goal: "sushi",
+    movesUsed: 5,
+    similarity: 0.71199,
+    equation: "paris + food + fish",
+    won: true,
+    points: 110,
+    par: 3,
+    streak: 1,
+    practice: false,
+  };
+
+  it("leads a win with the day and the points", () => {
+    expect(shareText(base)).toBe(
+      "Wordelate Nov 20th: 110 points!\nI got from paris to sushi in 5 moves (par 3).\nparis + food + fish",
+    );
   });
 
-  it("stays a single line before any words are used", () => {
-    const text = shareText({
-      start: "king",
-      goal: "queen",
-      movesUsed: 0,
-      similarity: 0.16,
-      equation: "   ",
-    });
-    expect(text).toBe("Wordelate king→queen · 0/16 · 16%");
+  it("mentions a streak of two or more, but not in practice", () => {
+    expect(shareText({ ...base, streak: 4 })).toContain("4 day streak.");
+    expect(shareText({ ...base, streak: 4, practice: true })).not.toContain("streak");
+    expect(shareText({ ...base, practice: true }).split("\n")[0]).toBe("Wordelate Nov 20th (practice): 110 points!");
   });
 
-  it("escapes the words and embeds the graph for a rich paste", () => {
-    const html = shareHtml('king < queen\nking + "man"', "data:image/png;base64,abc");
-    expect(html).toContain("king &lt; queen<br>king + &quot;man&quot;");
+  it("describes an unfinished game by how far along it is", () => {
+    const text = shareText({ ...base, won: false, movesUsed: 0, similarity: 0.16, equation: "   " });
+    expect(text).toBe("Wordelate Nov 20th: paris→sushi\n16% of the way there in 0/16 moves.");
+  });
+
+  it("writes the day with the right ordinal", () => {
+    expect(shareDate("2026-11-01")).toBe("Nov 1st");
+    expect(shareDate("2026-11-02")).toBe("Nov 2nd");
+    expect(shareDate("2026-11-03")).toBe("Nov 3rd");
+    expect(shareDate("2026-11-11")).toBe("Nov 11th");
+    expect(shareDate("2026-11-22")).toBe("Nov 22nd");
+    expect(shareDate("nope")).toBe("nope");
+  });
+
+  it("escapes the words, links the name, and embeds the graph for a rich paste", () => {
+    const html = shareHtml('Wordelate Nov 20th\nking < queen + "man"', "data:image/png;base64,abc");
+    expect(html).toContain(`<a href="${WORD_ELATE_URL}">Wordelate</a> Nov 20th<br>king &lt; queen + &quot;man&quot;`);
     expect(html).toContain('src="data:image/png;base64,abc"');
     expect(shareHtml("king→queen", null)).toBe("<p>king→queen</p>");
   });
 
-  it("adds the wordelate link under the result", () => {
-    const message = shareMessage("Wordelate king→queen · 2/16 · 71.2%\nking + man − woman");
+  it("adds the wordelate link under the plain message", () => {
+    const message = shareMessage("Wordelate Nov 20th: 110 points!\nking + man − woman");
     expect(message.endsWith(`\n\n${WORD_ELATE_URL}`)).toBe(true);
     expect(message).toContain("king + man − woman");
-  });
-});
-
-describe("share sheet", () => {
-  it("opens on a touch device that has no hover", () => {
-    expect(shouldUseShareSheet({ shareApi: true, coarsePointer: true, hoverNone: true })).toBe(true);
-    expect(shouldUseShareSheet({ shareApi: true, coarsePointer: false, hoverNone: true })).toBe(false);
-    expect(shouldUseShareSheet({ shareApi: true, coarsePointer: true, hoverNone: false })).toBe(false);
-    expect(shouldUseShareSheet({ shareApi: false, coarsePointer: true, hoverNone: true })).toBe(false);
   });
 });
 

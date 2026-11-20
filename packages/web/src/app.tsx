@@ -12,6 +12,7 @@ import { MoveForm } from "./components/move-form.js";
 import { PathView } from "./components/path-view.js";
 import type { GraphShot } from "./components/path-view.js";
 import { Result } from "./components/result.js";
+import { ShareDialog } from "./components/share-dialog.js";
 import { RewardsDialog } from "./components/rewards-dialog.js";
 import { StatusBar } from "./components/status-bar.js";
 import { TopBar } from "./components/top-bar.js";
@@ -32,11 +33,7 @@ import {
   progressTowardGoal,
   LABEL_NEAR_DUPLICATE_CUTOFF,
   LABEL_WARM_SIMILARITY,
-  shareHtml,
-  shareMessage,
   shareText,
-  shouldUseShareSheet,
-  WORD_ELATE_URL,
 } from "./lib/game.js";
 import { closestWord, loadPack, nearestLabels, rowFor } from "./lib/pack.js";
 import type { Pack, PackProgress } from "./lib/pack.js";
@@ -90,88 +87,6 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.length > 0 ? error.message : fallback;
 }
 
-function shareAborted(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
-}
-
-function mediaMatches(query: string): boolean {
-  return typeof window.matchMedia === "function" && window.matchMedia(query).matches;
-}
-
-/** The system share sheet: result text, the graph when the device accepts a file, and the game link. */
-async function presentShareSheet(text: string, capture: () => GraphShot | null): Promise<void> {
-  const data: ShareData = {
-    title: "Wordelate",
-    text,
-    url: WORD_ELATE_URL,
-  };
-  let shot: GraphShot | null = null;
-  try {
-    shot = capture();
-  } catch {
-    shot = null;
-  }
-  if (shot) {
-    const file = new File([shot.png], "wordelate.png", { type: "image/png" });
-    const withFile: ShareData = { ...data, files: [file] };
-    if (typeof navigator.canShare !== "function" || navigator.canShare(withFile)) {
-      try {
-        await navigator.share(withFile);
-        return;
-      } catch (error) {
-        if (shareAborted(error)) throw error;
-      }
-    }
-  }
-  await navigator.share(data);
-}
-
-/**
- * Text plus a graph picture when the browser can hold both. Falls back to the words alone.
- * The clipboard request starts before the picture is encoded, so the click still counts.
- */
-function copyShare(text: string, capture: () => GraphShot | null): Promise<void> {
-  const clipboard = navigator.clipboard;
-  if (!clipboard) return Promise.reject(new Error("Clipboard unavailable"));
-  const plain = new Blob([text], { type: "text/plain" });
-  const writeText = () => clipboard.writeText(text);
-  if (typeof ClipboardItem === "undefined" || !clipboard.write) return writeText();
-  try {
-    let take: () => void = () => {};
-    const shot = new Promise<GraphShot | null>((resolve) => {
-      take = () => {
-        try {
-          resolve(capture());
-        } catch {
-          resolve(null);
-        }
-      };
-    });
-    const png = shot.then((image) => {
-      if (!image) throw new Error("No graph");
-      return image.png;
-    });
-    const html = shot.then((image) => new Blob([shareHtml(text, image?.dataUrl ?? null)], { type: "text/html" }));
-    const rich = new ClipboardItem({
-      "text/plain": plain,
-      "text/html": html,
-      "image/png": png,
-    });
-    const imageAndText = new ClipboardItem({
-      "text/plain": plain,
-      "image/png": png,
-    });
-    const pending = clipboard
-      .write([rich])
-      .catch(() => clipboard.write([imageAndText]))
-      .catch(() => writeText());
-    take();
-    return pending;
-  } catch {
-    return writeText();
-  }
-}
-
 function positionKey(puzzleId: string, moves: readonly Move[]): string {
   let key = puzzleId;
   for (const move of moves) {
@@ -212,7 +127,7 @@ export function App() {
   const [boardState, setBoardState] = useState<"loading" | "ready" | "off" | "error">("off");
   const [moveError, setMoveError] = useState<string | null>(null);
   const [nearestHit, setNearestHit] = useState<NearestHit | null>(null);
-  const [shareNote, setShareNote] = useState<string | null>(null);
+  const [shareDraft, setShareDraft] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [formKey, setFormKey] = useState(0);
   const [scoreLog, setScoreLog] = useState<ScoreEntry[]>(() => readScores());
@@ -451,7 +366,7 @@ export function App() {
     setGaveUp(saved?.gaveUp ?? false);
     setRevealed(false);
     setMoveError(null);
-    setShareNote(null);
+    setShareDraft(null);
     setNearestHit(null);
     setWinReport(null);
     setWinOpen(false);
@@ -532,42 +447,32 @@ export function App() {
     armedPuzzle.current = puzzle.id;
     setMoves(outcome.moves);
     setMoveError(null);
-    setShareNote(null);
     return true;
   }
 
-  async function share() {
+  /** Build the default message and open the share menu. */
+  function openShare() {
     if (!puzzle || !played || !played.ok) return;
     const used = appliedSteps(moves);
-    const text = shareText({
-      start: puzzle.start,
-      goal: puzzle.goal,
-      movesUsed: played.movesUsed,
-      similarity: shownProgress.current,
-      equation: used.length > 0 ? formatEquation(puzzle.start, used) : "",
-    });
-    const capture = () => graphShot.current?.() ?? null;
-    if (
-      shouldUseShareSheet({
-        shareApi: typeof navigator.share === "function",
-        coarsePointer: mediaMatches("(pointer: coarse)"),
-        hoverNone: mediaMatches("(hover: none)"),
-      })
-    ) {
-      try {
-        await presentShareSheet(text, capture);
-        setShareNote("Shared!");
-        return;
-      } catch (error) {
-        if (shareAborted(error)) return;
-      }
-    }
-    try {
-      await copyShare(shareMessage(text), capture);
-      setShareNote("Copied!");
-    } catch {
-      setShareNote("Couldn't copy");
-    }
+    const today = calendarDay(new Date());
+    const todayPuzzle = puzzles ? puzzleForDay(puzzles, today) : null;
+    const practice = !todayPuzzle || todayPuzzle.id !== puzzle.id;
+    const scored = played.scoredSteps.length;
+    setShareDraft(
+      shareText({
+        day: archiveDay ?? today,
+        start: puzzle.start,
+        goal: puzzle.goal,
+        movesUsed: won ? scored : played.movesUsed,
+        similarity: shownProgress.current,
+        equation: used.length > 0 ? formatEquation(puzzle.start, used) : "",
+        won,
+        points: scoreForMoves(scored),
+        par: puzzle.par > 0 ? puzzle.par : null,
+        streak: streakAsOf(streakState, today),
+        practice,
+      }),
+    );
   }
 
   const todayKey = calendarDay(new Date());
@@ -658,7 +563,6 @@ export function App() {
         <WinDialog
           open={winOpen}
           report={winReport}
-          shareNote={shareNote}
           board={
             <StandingsView
               snapshot={board}
@@ -679,9 +583,15 @@ export function App() {
             />
           }
           onShare={() => {
-            void share();
+            openShare();
           }}
           onClose={() => setWinOpen(false)}
+        />
+        <ShareDialog
+          open={shareDraft != null}
+          text={shareDraft ?? ""}
+          capture={() => graphShot.current?.() ?? null}
+          onClose={() => setShareDraft(null)}
         />
       </div>
     );
@@ -812,10 +722,9 @@ export function App() {
             }}
             onRetry={resetPuzzle}
             onShare={() => {
-              void share();
+              openShare();
             }}
-            shareNote={shareNote}
-          />
+            />
         </div>
       </section>
     </>,

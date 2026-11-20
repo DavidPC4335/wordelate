@@ -14,7 +14,6 @@ export function Result({
   onGiveUp,
   onRetry,
   onShare,
-  shareNote,
 }: {
   won: boolean;
   gaveUp: boolean;
@@ -24,7 +23,6 @@ export function Result({
   onGiveUp: () => void;
   onRetry: () => void;
   onShare: () => void;
-  shareNote: string | null;
 }) {
   const [sure, setSure] = useState(false);
   const finished = won || gaveUp || outOfMoves;
@@ -87,7 +85,6 @@ export function Result({
           </>
         )}
       </div>
-      {shareNote ? <p class="share-note">{shareNote}</p> : null}
     </section>
   );
 }

@@ -50,14 +50,12 @@ function useCountUp(target: number, run: boolean): number {
 export function WinDialog({
   open,
   report,
-  shareNote,
   board,
   onShare,
   onClose,
 }: {
   open: boolean;
   report: WinReport | null;
-  shareNote: string | null;
   board: ComponentChildren;
   onShare: () => void;
   onClose: () => void;
@@ -69,7 +67,6 @@ export function WinDialog({
         <WinBody
           report={report}
           shown={shown}
-          shareNote={shareNote}
           board={board}
           onShare={onShare}
           onClose={onClose}
@@ -82,14 +79,12 @@ export function WinDialog({
 function WinBody({
   report,
   shown,
-  shareNote,
   board,
   onShare,
   onClose,
 }: {
   report: WinReport;
   shown: number;
-  shareNote: string | null;
   board: ComponentChildren;
   onShare: () => void;
   onClose: () => void;
@@ -105,7 +100,9 @@ function WinBody({
           </span>
         ))}
       </div>
-      <h2 class="win-title">{rating.title}</h2>
+      <h2 class="win-title" tabIndex={-1} autofocus>
+        {rating.title}
+      </h2>
       <p class="win-sub">
         <strong>{report.start}</strong> <ArrowIcon size={16} /> <strong>{report.goal}</strong> in{" "}
         {report.moves} {report.moves === 1 ? "move" : "moves"}
@@ -178,7 +175,6 @@ function WinBody({
           Look at the graph
         </button>
       </div>
-      {shareNote ? <p class="share-note">{shareNote}</p> : null}
     </div>
   );
 }

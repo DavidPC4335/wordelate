@@ -1,4 +1,4 @@
-import { useId, useState } from "preact/hooks";
+import { useEffect, useId, useRef, useState } from "preact/hooks";
 import { ANONYMOUS, TOP_SIZE, bellPoint, curveMarker } from "../lib/standings.js";
 import type { BoardEntry, BoardSnapshot } from "../lib/standings.js";
 import { ArrowIcon, CheckIcon, StarIcon, TrophyIcon } from "./icons.js";
@@ -199,6 +199,16 @@ function Cheer({ you, today, onName }: { you: You; today: boolean; onName?: Name
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const askName = you.nameEligible && !you.named && onName != null;
+  const card = useRef<HTMLElement>(null);
+  // The board arrives after the dialog opens. Bring the name prompt into view so it is not missed.
+  useEffect(() => {
+    if (!askName) return;
+    const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const timer = window.setTimeout(() => {
+      card.current?.scrollIntoView({ block: "center", behavior: reduced ? "auto" : "smooth" });
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [askName]);
   const when = today ? "today" : "that day";
   const title = you.rank === 1 ? "You're #1 on the leaderboard!" : "You made the leaderboard!";
   const standing =
@@ -206,7 +216,7 @@ function Cheer({ you, today, onName }: { you: You; today: boolean; onName?: Name
       ? `You're the first score ${when}.`
       : `#${you.rank} of ${you.total} players ${when}.`;
   return (
-    <section class={askName ? "board-cheer board-cheer-ask" : "board-cheer"} aria-label="You made the leaderboard">
+    <section ref={card} class={askName ? "board-cheer board-cheer-ask" : "board-cheer"} aria-label="You made the leaderboard">
       {SPARKS.map((spark) => (
         <span
           class="cheer-spark"

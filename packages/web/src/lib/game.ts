@@ -46,19 +46,65 @@ export function progressTowardGoal(input: {
 /** Public game address. The share sheet attaches this so the link sits in the message. */
 export const WORD_ELATE_URL = "https://wordelate.com/";
 
-/** Share text: the summary line, then the equation when the player has used any words. */
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function ordinal(n: number): string {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
+/** "Nov 20th" for a YYYY-MM-DD day. Anything else comes back unchanged. */
+export function shareDate(day: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  const month = MONTHS[Number(match?.[2]) - 1];
+  const date = Number(match?.[3]);
+  if (!match || !month || !(date >= 1 && date <= 31)) return day;
+  return `${month} ${ordinal(date)}`;
+}
+
+/**
+ * The share message. A win leads with the day and the points, then says how it went.
+ * An unfinished game leads with the puzzle and how far along it is. The equation closes it out.
+ */
 export function shareText(input: {
+  /** The calendar day this puzzle belongs to, as YYYY-MM-DD. */
+  day: string;
   start: string;
   goal: string;
   movesUsed: number;
   similarity: number;
   equation: string;
+  won: boolean;
+  points: number;
+  par: number | null;
+  streak: number;
+  practice: boolean;
 }): string {
-  const percent = formatPercent(input.similarity);
-  const head = `Wordelate ${input.start}→${input.goal} · ${input.movesUsed}/${MAX_MOVES} · ${percent}%`;
+  const title = `Wordelate ${shareDate(input.day)}${input.practice ? " (practice)" : ""}`;
+  const moves = `${input.movesUsed} ${input.movesUsed === 1 ? "move" : "moves"}`;
+  const lines: string[] = [];
+  if (input.won) {
+    lines.push(`${title}: ${input.points} ${input.points === 1 ? "point" : "points"}!`);
+    const par = input.par ? ` (par ${input.par})` : "";
+    const streak = !input.practice && input.streak >= 2 ? ` ${input.streak} day streak.` : "";
+    lines.push(`I got from ${input.start} to ${input.goal} in ${moves}${par}.${streak}`);
+  } else {
+    lines.push(`${title}: ${input.start}→${input.goal}`);
+    lines.push(`${formatPercent(input.similarity)}% of the way there in ${input.movesUsed}/${MAX_MOVES} moves.`);
+  }
   const equation = input.equation.trim();
-  if (equation.length === 0) return head;
-  return `${head}\n${equation}`;
+  if (equation.length > 0) lines.push(equation);
+  return lines.join("\n");
 }
 
 /** Clipboard text. The share sheet sends the same words and attaches the link itself. */
@@ -66,18 +112,10 @@ export function shareMessage(text: string): string {
   return `${text}\n\n${WORD_ELATE_URL}`;
 }
 
-/** Phones and tablets open the system share sheet. A desktop pointer keeps the clipboard. */
-export function shouldUseShareSheet(input: {
-  shareApi: boolean;
-  coarsePointer: boolean;
-  hoverNone: boolean;
-}): boolean {
-  return input.shareApi && input.coarsePointer && input.hoverNone;
-}
-
-/** Rich paste: the same words, plus the graph when a picture is available. */
+/** Rich paste: the same words with "Wordelate" as a link, plus the graph when a picture is available. */
 export function shareHtml(text: string, imageSrc: string | null): string {
-  const lines = escapeHtml(text).replaceAll("\n", "<br>");
+  const link = `<a href="${escapeHtml(WORD_ELATE_URL)}">Wordelate</a>`;
+  const lines = escapeHtml(text).replace(/^Wordelate/, link).replaceAll("\n", "<br>");
   if (!imageSrc) return `<p>${lines}</p>`;
   return `<p>${lines}</p><img src="${escapeHtml(imageSrc)}" alt="Graph">`;
 }
