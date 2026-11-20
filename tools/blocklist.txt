@@ -1,0 +1,55 @@
+# Editable blocklist. One word per line.
+# Lines starting with # are comments. Matching is exact, lowercase, a-z only.
+# This is a starter list of obvious profanity and slurs. It is not exhaustive
+# and it is meant to be edited. Words here are removed from the vocabulary.
+
+ass
+asses
+asshole
+bastard
+bitch
+bitches
+bollocks
+boner
+bullshit
+chink
+cock
+cocks
+crap
+cum
+cunt
+damn
+dick
+dicks
+dildo
+dyke
+fag
+faggot
+fuck
+fucked
+fucker
+fucking
+goddamn
+hell
+homo
+jizz
+kike
+motherfucker
+nigga
+nigger
+piss
+porn
+pussy
+rape
+rapist
+retard
+shit
+shitty
+slut
+spic
+tits
+tranny
+twat
+wank
+wetback
+whore

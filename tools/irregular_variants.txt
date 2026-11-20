@@ -1,0 +1,55 @@
+# Editable irregular variant groups.
+# One group per line. Separate words with spaces or slashes.
+# If START or GOAL is in a group, every other word in that group is banned.
+# The stemmer does not connect these. mouse/mice is the canonical pair.
+
+mouse mice
+man men
+woman women
+child children
+person people
+goose geese
+tooth teeth
+foot feet
+leaf leaves
+life lives
+knife knives
+wife wives
+wolf wolves
+half halves
+loaf loaves
+die dice
+ox oxen
+index indices indexes
+criterion criteria
+phenomenon phenomena
+analysis analyses
+thesis theses
+crisis crises
+oasis oases
+cactus cacti
+fungus fungi
+nucleus nuclei
+radius radii
+focus foci
+alumnus alumni
+medium media
+datum data
+go went gone
+come came
+see saw seen
+eat ate eaten
+take took taken
+give gave given
+get got gotten
+make made
+say said
+tell told
+find found
+think thought
+know knew known
+do did done
+has have had
+is am are was were been
+good better best
+bad worse worst

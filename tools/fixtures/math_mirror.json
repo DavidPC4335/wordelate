@@ -1,0 +1,84 @@
+{
+  "stem_cases": [
+    {"word": "stopped", "stem": "stop"},
+    {"word": "stopping", "stem": "stop"},
+    {"word": "stops", "stem": "stop"},
+    {"word": "running", "stem": "run"},
+    {"word": "deserts", "stem": "desert"},
+    {"word": "desert", "stem": "desert"},
+    {"word": "cities", "stem": "city"},
+    {"word": "carried", "stem": "carry"},
+    {"word": "sing", "stem": "sing"},
+    {"word": "as", "stem": "as"}
+  ],
+  "ban_cases": [
+    {
+      "operand": "deserts",
+      "start": "water",
+      "goal": "desert",
+      "banned": true,
+      "note": "plural of the goal"
+    },
+    {
+      "operand": "stopped",
+      "start": "stop",
+      "goal": "goal",
+      "banned": true,
+      "note": "doubled consonant before ed"
+    },
+    {
+      "operand": "apple",
+      "start": "a",
+      "goal": "fruit",
+      "banned": false,
+      "note": "one-letter prefix is not a ban"
+    },
+    {
+      "operand": "about",
+      "start": "a",
+      "goal": "fruit",
+      "banned": false,
+      "note": "one-letter prefix is not a ban"
+    },
+    {
+      "operand": "catalog",
+      "start": "cat",
+      "goal": "dog",
+      "banned": false,
+      "note": "raw prefix, leftover is not a suffix"
+    },
+    {
+      "operand": "there",
+      "start": "the",
+      "goal": "here",
+      "banned": false,
+      "note": "raw prefix, leftover is not a suffix"
+    },
+    {
+      "operand": "cats",
+      "start": "cat",
+      "goal": "dog",
+      "banned": true,
+      "note": "exact suffix s"
+    }
+  ],
+  "quantize_cases": [
+    {
+      "name": "unit_3_4_5",
+      "vector": [0.6, 0.0, 0.0, 0.8],
+      "q": [95, 0, 0, 127],
+      "note": "scale = 0.8/127; round(0.6*127/0.8) = round(95.25) = 95"
+    },
+    {
+      "name": "js_round_halfway",
+      "vector": [127.0, 64.5, -63.5],
+      "q": [127, 65, -63],
+      "note": "Math.round half toward +infinity. Python bankers round would yield [127, 64, -64]."
+    }
+  ],
+  "cosine_cases": [
+    {"a": [1.0, 0.0, 0.0], "b": [0.0, 1.0, 0.0], "cosine": 0.0},
+    {"a": [1.0, 0.0, 0.0], "b": [1.0, 0.0, 0.0], "cosine": 1.0},
+    {"a": [1.0, 1.0, 0.0], "b": [1.0, 0.0, 0.0], "cosine": 0.7071067811865476}
+  ]
+}

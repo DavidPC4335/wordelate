@@ -1,0 +1,28 @@
+{
+  "account_id": "794832d16bf5ae1ad8ce655e04ecfe89",
+  "account_name": "Davidpc4335@gmail.com's Account",
+  "project_name": "wordelate",
+  "project_id": "d89f32d4-fb72-4645-a140-9057ab899607",
+  "deployment_id": "7f349f4f-786c-46e4-84a0-b9833df9646a",
+  "url": "https://wordelate.pages.dev",
+  "deployment_url": "https://7f349f4f.wordelate.pages.dev",
+  "method": "cloudflare_pages_direct_upload",
+  "zone": {
+    "name": "wordelate.com",
+    "id": "f694d05f96133ecfbe65ff579f334ba6",
+    "attached": false,
+    "dns_record_count": 0,
+    "note": "Zone was not attached so its DNS was left unchanged."
+  },
+  "assets": {
+    "nearest_i8_path": "/vocab/nearest.i8",
+    "nearest_i8_bytes": 10718459,
+    "nearest_i8_magic": "WLN1"
+  },
+  "verified": {
+    "html_status": 200,
+    "nearest_i8_status": 200,
+    "spa_unknown_path_returns_index_html": true
+  },
+  "blocker": null
+}

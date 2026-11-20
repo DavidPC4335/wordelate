@@ -1,0 +1,174 @@
+[
+  {
+    "id": "king-queen",
+    "start": "king",
+    "goal": "queen",
+    "par": 2,
+    "solution": [
+      {
+        "op": "-",
+        "word": "man"
+      },
+      {
+        "op": "+",
+        "word": "woman"
+      }
+    ],
+    "solutionSimilarity": 0.6926,
+    "here": "queen"
+  },
+  {
+    "id": "uncle-aunt",
+    "start": "uncle",
+    "goal": "aunt",
+    "par": 2,
+    "solution": [
+      {
+        "op": "-",
+        "word": "man"
+      },
+      {
+        "op": "+",
+        "word": "woman"
+      }
+    ],
+    "solutionSimilarity": 0.8091,
+    "here": "aunt"
+  },
+  {
+    "id": "brother-sister",
+    "start": "brother",
+    "goal": "sister",
+    "par": 2,
+    "solution": [
+      {
+        "op": "-",
+        "word": "boy"
+      },
+      {
+        "op": "+",
+        "word": "girl"
+      }
+    ],
+    "solutionSimilarity": 0.8377,
+    "here": "sister"
+  },
+  {
+    "id": "prince-princess",
+    "start": "prince",
+    "goal": "princess",
+    "par": 2,
+    "solution": [
+      {
+        "op": "-",
+        "word": "man"
+      },
+      {
+        "op": "+",
+        "word": "woman"
+      }
+    ],
+    "solutionSimilarity": 0.6836,
+    "here": "princess"
+  },
+  {
+    "id": "father-mother",
+    "start": "father",
+    "goal": "mother",
+    "par": 2,
+    "solution": [
+      {
+        "op": "-",
+        "word": "man"
+      },
+      {
+        "op": "+",
+        "word": "woman"
+      }
+    ],
+    "solutionSimilarity": 0.7951,
+    "here": "mother"
+  },
+  {
+    "id": "boy-girl",
+    "start": "boy",
+    "goal": "girl",
+    "par": 2,
+    "solution": [
+      {
+        "op": "-",
+        "word": "man"
+      },
+      {
+        "op": "+",
+        "word": "woman"
+      }
+    ],
+    "solutionSimilarity": 0.8324,
+    "here": "girl"
+  },
+  {
+    "id": "man-woman",
+    "start": "man",
+    "goal": "woman",
+    "par": 2,
+    "solution": [
+      {
+        "op": "-",
+        "word": "king"
+      },
+      {
+        "op": "+",
+        "word": "queen"
+      }
+    ],
+    "solutionSimilarity": 0.6669,
+    "here": "woman"
+  },
+  {
+    "id": "dog-puppy",
+    "start": "dog",
+    "goal": "puppy",
+    "par": 1,
+    "solution": [
+      {
+        "op": "+",
+        "word": "baby"
+      }
+    ],
+    "solutionSimilarity": 0.8035,
+    "here": "puppy"
+  },
+  {
+    "id": "cat-kitten",
+    "start": "cat",
+    "goal": "kitten",
+    "par": 1,
+    "solution": [
+      {
+        "op": "+",
+        "word": "baby"
+      }
+    ],
+    "solutionSimilarity": 0.7914,
+    "here": "kitten"
+  },
+  {
+    "id": "good-bad",
+    "start": "good",
+    "goal": "bad",
+    "par": 2,
+    "solution": [
+      {
+        "op": "-",
+        "word": "better"
+      },
+      {
+        "op": "+",
+        "word": "worse"
+      }
+    ],
+    "solutionSimilarity": 0.7653,
+    "here": "bad"
+  }
+]

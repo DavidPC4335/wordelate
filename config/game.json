@@ -1,0 +1,24 @@
+{
+  "timezone": "America/New_York",
+  "vocabSize": 40000,
+  "maxMoves": 16,
+  "similarityBand": [0.05, 0.30],
+  "minSolvableSimilarity": 0.55,
+  "thresholdSlack": 0.03,
+  "minThreshold": 0.50,
+  "beamWidth": 64,
+  "beamDepth": 4,
+  "operandPoolSize": 8000,
+  "model": "conceptnet-numberbatch-en-19.08",
+  "modelPath": "data/models/numberbatch-en-19.08.txt.gz",
+  "displayVocabSize": 12000,
+  "labelNearDuplicateCutoff": 0.7,
+  "labelWarmSimilarity": 0.45,
+  "winSimilarity": 0.75,
+  "nicknameMaxLength": 24,
+  "rateLimit": {
+    "nearestPlayerPerMinute": 30,
+    "nearestIpPerMinute": 60,
+    "scorePlayerPerMinute": 10
+  }
+}

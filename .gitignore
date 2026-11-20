@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.wrangler/
+data/
+
+__pycache__/
+.venv/
+*.pyc
+
+.env
+.env.*
+!.env.example
+
+# gensim cache for word2vec-google-news-300 (multi-gigabyte; never commit)
+gensim-data/
+word2vec-google-news-300*
+**/word2vec-google-news-300*
