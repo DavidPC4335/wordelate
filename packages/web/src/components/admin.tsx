@@ -38,6 +38,8 @@ export function Admin({
             similarity: puzzle.solutionSimilarity,
             hereWord: puzzle.here,
             goalWord: puzzle.goal,
+            movesUsed: puzzle.solution.length,
+            acceptedWords: puzzle.accepted,
           });
           const current = puzzle.id === currentId;
           return (

@@ -1,8 +1,8 @@
 import { formatPercent } from "../lib/game.js";
 
-export function Meter({ similarity, won }: { similarity: number; won: boolean }) {
-  const percent = formatPercent(similarity);
-  const fill = Math.min(100, Math.max(0, similarity * 100));
+export function Meter({ progress, won }: { progress: number; won: boolean }) {
+  const percent = formatPercent(progress);
+  const fill = Math.min(100, Math.max(0, progress * 100));
 
   return (
     <div class={won ? "meter meter-won" : "meter"}>

@@ -1,5 +1,17 @@
 import { useRef, useState } from "preact/hooks";
 
+export type MoveOp = "add" | "subtract";
+
+/** A leading "+" adds. A leading "-" or "−" subtracts. The sign is stripped. With no sign, the button decides. */
+export function parseSignedEntry(raw: string, button: MoveOp): { op: MoveOp; word: string } {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("+")) return { op: "add", word: trimmed.slice(1).trim() };
+  if (trimmed.startsWith("-") || trimmed.startsWith("−")) {
+    return { op: "subtract", word: trimmed.slice(1).trim() };
+  }
+  return { op: button, word: trimmed };
+}
+
 export function MoveForm({
   suggestions,
   error,
@@ -27,11 +39,12 @@ export function MoveForm({
 
   function update(next: string) {
     setValue(next);
-    onQuery(next);
+    onQuery(parseSignedEntry(next, "add").word);
   }
 
-  function submit(word: string, op: "add" | "subtract") {
+  function submit(raw: string, button: MoveOp) {
     if (held) return;
+    const { op, word } = parseSignedEntry(raw, button);
     const ok = op === "add" ? onAdd(word) : onSubtract(word);
     if (!ok) return;
     setValue("");

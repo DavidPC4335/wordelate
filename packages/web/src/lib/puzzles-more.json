@@ -1,0 +1,272 @@
+[
+  {
+    "id": "paris-pizza",
+    "start": "paris",
+    "goal": "pizza",
+    "accepted": [
+      "pizzeria",
+      "pepperoni",
+      "pasta"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "france"
+      },
+      {
+        "op": "+",
+        "word": "cheese"
+      },
+      {
+        "op": "+",
+        "word": "italian"
+      }
+    ],
+    "solutionSimilarity": 0.5510,
+    "here": "pizza"
+  },
+  {
+    "id": "madrid-sushi",
+    "start": "madrid",
+    "goal": "sushi",
+    "accepted": [
+      "maki",
+      "ramen",
+      "seafood"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "spain"
+      },
+      {
+        "op": "+",
+        "word": "food"
+      },
+      {
+        "op": "+",
+        "word": "japan"
+      }
+    ],
+    "solutionSimilarity": 0.6272,
+    "here": "sushi"
+  },
+  {
+    "id": "boy-grandmother",
+    "start": "boy",
+    "goal": "grandmother",
+    "accepted": [
+      "grandma",
+      "granny",
+      "gran"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "young"
+      },
+      {
+        "op": "+",
+        "word": "mother"
+      },
+      {
+        "op": "+",
+        "word": "old"
+      }
+    ],
+    "solutionSimilarity": 0.6610,
+    "here": "grandmother"
+  },
+  {
+    "id": "girl-grandfather",
+    "start": "girl",
+    "goal": "grandfather",
+    "accepted": [
+      "grandpa",
+      "grandmother",
+      "grandma"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "child"
+      },
+      {
+        "op": "+",
+        "word": "dad"
+      },
+      {
+        "op": "+",
+        "word": "old"
+      }
+    ],
+    "solutionSimilarity": 0.5737,
+    "here": "grandfather"
+  },
+  {
+    "id": "wolf-puppy",
+    "start": "wolf",
+    "goal": "puppy",
+    "accepted": [
+      "dog",
+      "doggie",
+      "pooch"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "pack"
+      },
+      {
+        "op": "+",
+        "word": "pet"
+      },
+      {
+        "op": "+",
+        "word": "baby"
+      }
+    ],
+    "solutionSimilarity": 0.5713,
+    "here": "puppy"
+  },
+  {
+    "id": "boat-car",
+    "start": "boat",
+    "goal": "car",
+    "accepted": [
+      "automobile",
+      "vehicle",
+      "auto"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "sail"
+      },
+      {
+        "op": "+",
+        "word": "wheel"
+      },
+      {
+        "op": "+",
+        "word": "drive"
+      }
+    ],
+    "solutionSimilarity": 0.6418,
+    "here": "car"
+  },
+  {
+    "id": "train-airplane",
+    "start": "train",
+    "goal": "airplane",
+    "accepted": [
+      "aeroplane",
+      "aircraft",
+      "plane"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "rail"
+      },
+      {
+        "op": "+",
+        "word": "fly"
+      },
+      {
+        "op": "+",
+        "word": "engine"
+      }
+    ],
+    "solutionSimilarity": 0.5679,
+    "here": "airplane"
+  },
+  {
+    "id": "grape-beer",
+    "start": "grape",
+    "goal": "beer",
+    "accepted": [
+      "ale",
+      "lager",
+      "brewery"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "vine"
+      },
+      {
+        "op": "+",
+        "word": "drink"
+      },
+      {
+        "op": "+",
+        "word": "barley"
+      }
+    ],
+    "solutionSimilarity": 0.6304,
+    "here": "beer"
+  },
+  {
+    "id": "mountain-beach",
+    "start": "mountain",
+    "goal": "beach",
+    "accepted": [
+      "seaside",
+      "shore",
+      "coast"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "peak"
+      },
+      {
+        "op": "+",
+        "word": "sand"
+      },
+      {
+        "op": "+",
+        "word": "summer"
+      }
+    ],
+    "solutionSimilarity": 0.5216,
+    "here": "beach"
+  },
+  {
+    "id": "tree-flower",
+    "start": "tree",
+    "goal": "flower",
+    "accepted": [
+      "floral",
+      "blossom",
+      "bloom"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "forest"
+      },
+      {
+        "op": "+",
+        "word": "garden"
+      },
+      {
+        "op": "+",
+        "word": "color"
+      }
+    ],
+    "solutionSimilarity": 0.5259,
+    "here": "flower"
+  }
+]

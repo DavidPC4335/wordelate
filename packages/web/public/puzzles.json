@@ -3,6 +3,10 @@
     "id": "king-queen",
     "start": "king",
     "goal": "queen",
+    "accepted": [
+      "monarch",
+      "empress"
+    ],
     "par": 2,
     "solution": [
       {
@@ -21,6 +25,10 @@
     "id": "uncle-aunt",
     "start": "uncle",
     "goal": "aunt",
+    "accepted": [
+      "aunty",
+      "auntie"
+    ],
     "par": 2,
     "solution": [
       {
@@ -39,6 +47,10 @@
     "id": "brother-sister",
     "start": "brother",
     "goal": "sister",
+    "accepted": [
+      "sibling",
+      "sis"
+    ],
     "par": 2,
     "solution": [
       {
@@ -57,6 +69,11 @@
     "id": "prince-princess",
     "start": "prince",
     "goal": "princess",
+    "accepted": [
+      "queen",
+      "duchess",
+      "empress"
+    ],
     "par": 2,
     "solution": [
       {
@@ -75,6 +92,11 @@
     "id": "father-mother",
     "start": "father",
     "goal": "mother",
+    "accepted": [
+      "mom",
+      "mum",
+      "mama"
+    ],
     "par": 2,
     "solution": [
       {
@@ -93,6 +115,10 @@
     "id": "boy-girl",
     "start": "boy",
     "goal": "girl",
+    "accepted": [
+      "lass",
+      "girlie"
+    ],
     "par": 2,
     "solution": [
       {
@@ -111,6 +137,10 @@
     "id": "man-woman",
     "start": "man",
     "goal": "woman",
+    "accepted": [
+      "lady",
+      "female"
+    ],
     "par": 2,
     "solution": [
       {
@@ -129,6 +159,10 @@
     "id": "dog-puppy",
     "start": "dog",
     "goal": "puppy",
+    "accepted": [
+      "pup",
+      "pups"
+    ],
     "par": 1,
     "solution": [
       {
@@ -143,6 +177,10 @@
     "id": "cat-kitten",
     "start": "cat",
     "goal": "kitten",
+    "accepted": [
+      "kitty",
+      "kitties"
+    ],
     "par": 1,
     "solution": [
       {
@@ -157,6 +195,11 @@
     "id": "good-bad",
     "start": "good",
     "goal": "bad",
+    "accepted": [
+      "terrible",
+      "horrible",
+      "awful"
+    ],
     "par": 2,
     "solution": [
       {
@@ -170,5 +213,164 @@
     ],
     "solutionSimilarity": 0.7653,
     "here": "bad"
+  },
+  {
+    "id": "paris-sushi",
+    "start": "paris",
+    "goal": "sushi",
+    "accepted": [
+      "maki",
+      "seafood"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "france"
+      },
+      {
+        "op": "+",
+        "word": "japan"
+      },
+      {
+        "op": "+",
+        "word": "food"
+      }
+    ],
+    "solutionSimilarity": 0.6045,
+    "here": "sushi"
+  },
+  {
+    "id": "mother-son",
+    "start": "mother",
+    "goal": "son",
+    "accepted": [
+      "stepson",
+      "boy"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "woman"
+      },
+      {
+        "op": "+",
+        "word": "man"
+      },
+      {
+        "op": "+",
+        "word": "child"
+      }
+    ],
+    "solutionSimilarity": 0.7355,
+    "here": "son"
+  },
+  {
+    "id": "apple-wine",
+    "start": "apple",
+    "goal": "wine",
+    "accepted": [
+      "vino",
+      "pinot",
+      "champagne"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "fruit"
+      },
+      {
+        "op": "+",
+        "word": "grape"
+      },
+      {
+        "op": "+",
+        "word": "drink"
+      }
+    ],
+    "solutionSimilarity": 0.6143,
+    "here": "wine"
+  },
+  {
+    "id": "son-grandmother",
+    "start": "son",
+    "goal": "grandmother",
+    "accepted": [
+      "grandma",
+      "granny",
+      "gran"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "boy"
+      },
+      {
+        "op": "+",
+        "word": "mother"
+      },
+      {
+        "op": "+",
+        "word": "old"
+      }
+    ],
+    "solutionSimilarity": 0.6955,
+    "here": "grandmother"
+  },
+  {
+    "id": "beach-ski",
+    "start": "beach",
+    "goal": "ski",
+    "accepted": [
+      "alpine",
+      "downhill",
+      "slopes"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "sand"
+      },
+      {
+        "op": "+",
+        "word": "snow"
+      },
+      {
+        "op": "+",
+        "word": "mountain"
+      }
+    ],
+    "solutionSimilarity": 0.5897,
+    "here": "ski"
+  },
+  {
+    "id": "sun-snow",
+    "start": "sun",
+    "goal": "snow",
+    "accepted": [
+      "snowy",
+      "blizzard"
+    ],
+    "par": 3,
+    "solution": [
+      {
+        "op": "-",
+        "word": "hot"
+      },
+      {
+        "op": "+",
+        "word": "cold"
+      },
+      {
+        "op": "+",
+        "word": "winter"
+      }
+    ],
+    "solutionSimilarity": 0.5215,
+    "here": "snow"
   }
 ]

@@ -1,4 +1,5 @@
 import type { AppliedStep } from "./game.js";
+import morePuzzles from "./puzzles-more.json" with { type: "json" };
 
 export type Puzzle = {
   id: string;
@@ -8,6 +9,7 @@ export type Puzzle = {
   solution: AppliedStep[];
   solutionSimilarity: number;
   here: string;
+  accepted: readonly string[];
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -29,6 +31,22 @@ function readSolution(value: unknown, id: string): AppliedStep[] {
       throw new Error(`Puzzle ${id} solution step ${index} is missing a word`);
     }
     return { op, word: word.trim().toLowerCase() };
+  });
+}
+
+function readAccepted(value: unknown, id: string): string[] {
+  if (!Array.isArray(value) || value.length < 2 || value.length > 3) {
+    throw new Error(`Puzzle ${id} needs 2 or 3 accepted words`);
+  }
+  return value.map((entry, index) => {
+    if (typeof entry !== "string") {
+      throw new Error(`Puzzle ${id} accepted word ${index + 1} must be lowercase a-z`);
+    }
+    const word = entry.trim();
+    if (!/^[a-z]+$/.test(word)) {
+      throw new Error(`Puzzle ${id} accepted word ${index + 1} must be lowercase a-z`);
+    }
+    return word;
   });
 }
 
@@ -61,6 +79,7 @@ export function parsePuzzleFile(data: unknown): Puzzle[] {
     if (typeof here !== "string" || here.length === 0) {
       throw new Error(`Puzzle ${id} is missing here`);
     }
+    const accepted = readAccepted(row.accepted, id);
     return {
       id,
       start: start.trim().toLowerCase(),
@@ -69,8 +88,17 @@ export function parsePuzzleFile(data: unknown): Puzzle[] {
       solution,
       solutionSimilarity,
       here: here.trim().toLowerCase(),
+      accepted,
     };
   });
   if (puzzles.length === 0) throw new Error("Puzzle file is empty");
   return puzzles;
+}
+
+/** Daily puzzles plus the extra complex set. Accepted words stay on each row. */
+export function mergePuzzles(main: unknown): Puzzle[] {
+  if (!Array.isArray(main) || !Array.isArray(morePuzzles)) {
+    throw new Error("Puzzle file must be a list");
+  }
+  return parsePuzzleFile([...main, ...morePuzzles]);
 }

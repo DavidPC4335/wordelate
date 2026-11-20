@@ -1,13 +1,13 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { Move } from "@wordelate/game-math";
-import { replay } from "@wordelate/game-math";
+import { cosine, replay } from "@wordelate/game-math";
 import { Admin } from "./components/admin.js";
 import { Equation } from "./components/equation.js";
-import { Here } from "./components/here.js";
 import { HowItWorks } from "./components/how-it-works.js";
 import { Meter } from "./components/meter.js";
 import { MoveForm } from "./components/move-form.js";
+import { PathView } from "./components/path-view.js";
 import { Result } from "./components/result.js";
 import { StatusBar } from "./components/status-bar.js";
 import {
@@ -18,14 +18,14 @@ import {
   describeMoveError,
   formatEquation,
   hereAtPosition,
-  hereLabel,
+  progressTowardGoal,
   LABEL_NEAR_DUPLICATE_CUTOFF,
   LABEL_WARM_SIMILARITY,
   shareText,
 } from "./lib/game.js";
 import { loadPack, nearestLabels, rowFor, suggestWords } from "./lib/pack.js";
 import type { Pack, PackProgress } from "./lib/pack.js";
-import { parsePuzzleFile } from "./lib/puzzles.js";
+import { mergePuzzles } from "./lib/puzzles.js";
 import type { Puzzle } from "./lib/puzzles.js";
 import { getPlayerId, loadGame, saveGame } from "./lib/storage.js";
 
@@ -84,6 +84,7 @@ export function App() {
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [formKey, setFormKey] = useState(0);
   const scanGeneration = useRef(0);
+  const shownProgress = useRef(0);
 
   useEffect(() => {
     getPlayerId();
@@ -113,7 +114,7 @@ export function App() {
     fetch("/puzzles.json")
       .then(async (response) => {
         if (!response.ok) throw new Error(`Puzzle list failed (${response.status})`);
-        return parsePuzzleFile(await response.json());
+        return mergePuzzles(await response.json());
       })
       .then((list) => {
         if (cancel) return;
@@ -256,7 +257,7 @@ export function App() {
       start: puzzle.start,
       goal: puzzle.goal,
       movesUsed: played.movesUsed,
-      similarity: played.similarity,
+      similarity: shownProgress.current,
     });
     try {
       await navigator.clipboard.writeText(text);
@@ -266,9 +267,9 @@ export function App() {
     }
   }
 
-  function layout(body: ComponentChildren) {
+  function layout(body: ComponentChildren, play = false) {
     return (
-      <main class="page">
+      <main class={play ? "page page-play" : "page"}>
         <header class="mast">
           <div class="masthead">
             <h1 class="title">Wordelate</h1>
@@ -354,27 +355,51 @@ export function App() {
     similarity: played.similarity,
     hereWord: settledWord,
     goalWord: puzzle.goal,
+    movesUsed: played.equationWords.length,
+    acceptedWords: puzzle.accepted,
   });
-  const labeled = atStart ? hereWord : hereLabel(won, puzzle.goal, settledWord);
-  const hereWords = labeled ? [labeled, ...scanned.filter((word) => word !== labeled)] : scanned;
   const steps = appliedSteps(moves);
+  const startRow = rowFor(packState.pack, puzzle.start);
+  const goalRow = rowFor(packState.pack, puzzle.goal);
+  const progress = progressTowardGoal({
+    similarity: played.similarity,
+    startSimilarity: startRow && goalRow ? cosine(startRow, goalRow) : 0,
+    won,
+  });
+  shownProgress.current = progress;
   const solution = formatEquation(puzzle.start, puzzle.solution);
   const locked = won || gaveUp || played.movesUsed >= MAX_MOVES;
 
   return layout(
-    <>
-      <article class="board">
-        <h2 class="pair">
+    <article class="stage">
+      <div class="stage-graph">
+        <h2 class="pair stage-pair">
           <span>{puzzle.start}</span>
           <span class="arrow" aria-hidden="true">
             →
           </span>
           <span class="pair-goal">{puzzle.goal}</span>
         </h2>
-        <Equation start={puzzle.start} steps={steps} />
-        <Here words={hereWords} pending={!won && pendingHere} won={won} />
-        <Meter similarity={played.similarity} won={won} />
-        <StatusBar movesUsed={played.movesUsed} maxMoves={MAX_MOVES} par={puzzle.par} />
+        {startRow && goalRow ? (
+          <PathView
+            pack={packState.pack}
+            start={startRow}
+            goal={goalRow}
+            startWord={puzzle.start}
+            goalWord={puzzle.goal}
+            steps={steps}
+            position={played.position}
+            similarity={played.similarity}
+            won={won}
+          />
+        ) : null}
+      </div>
+      <div class="dock">
+        <div class="dock-meta">
+          <Equation start={puzzle.start} steps={steps} />
+          <StatusBar movesUsed={played.movesUsed} maxMoves={MAX_MOVES} par={puzzle.par} />
+        </div>
+        <Meter progress={progress} won={won} />
         <MoveForm
           key={formKey}
           suggestions={suggestions}
@@ -404,8 +429,9 @@ export function App() {
           }}
           shareNote={shareNote}
         />
-      </article>
-      <HowItWorks />
-    </>,
+        <HowItWorks />
+      </div>
+    </article>,
+    true,
   );
 }

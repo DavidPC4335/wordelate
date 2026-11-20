@@ -1,4 +1,4 @@
-import { isWin, replay } from "@wordelate/game-math";
+import { isVariant, replay } from "@wordelate/game-math";
 import type { Move, ReplaySuccess, VectorFor } from "@wordelate/game-math";
 
 export const MAX_MOVES = 16;
@@ -21,7 +21,26 @@ export type CommitResult =
   | { ok: false; error: string };
 
 export function formatPercent(similarity: number): string {
-  return (similarity * 100).toFixed(1);
+  const shown = similarity * 100;
+  if (Math.abs(shown - Math.round(shown)) < 0.05) return String(Math.round(shown));
+  return shown.toFixed(1);
+}
+
+/**
+ * Meter value. 0 is the puzzle's starting similarity, 1 is the goal vector.
+ * A win is drawn as a completed trip even when the landing vector is not the goal itself.
+ */
+export function progressTowardGoal(input: {
+  similarity: number;
+  startSimilarity: number;
+  won: boolean;
+}): number {
+  if (input.won) return 1;
+  const span = 1 - input.startSimilarity;
+  if (!(span > 1e-6)) return 0;
+  const raw = (input.similarity - input.startSimilarity) / span;
+  if (!Number.isFinite(raw)) return 0;
+  return Math.min(1, Math.max(0, raw));
 }
 
 /** Share line. Operand words are not part of the text. */
@@ -35,32 +54,32 @@ export function shareText(input: {
   return `Wordelate ${input.start}→${input.goal} · ${input.movesUsed}/${MAX_MOVES} · ${percent}%`;
 }
 
-/** Hidden similarity threshold. Not shown, and not read from the query or storage. */
-export const WIN_SIMILARITY = 0.75;
-
 /** Hide a label this close to the start word or any single operand. Not shown. */
 export const LABEL_NEAR_DUPLICATE_CUTOFF = 0.7;
 
 /** At or above this similarity to the goal, show three labels instead of one. Not shown. */
 export const LABEL_WARM_SIMILARITY = 0.45;
 
-export function positionWins(similarity: number): boolean {
-  return isWin(similarity, WIN_SIMILARITY);
-}
-
 /**
- * Win when similarity reaches the hidden threshold, or when the word shown
- * as "You are here" is the goal. The landing word counts even below the threshold.
+ * Win only after at least one applied move, when the primary "You are here"
+ * word is the goal, an accepted alternate, or an inflection of either
+ * (airplanes counts as airplane). Similarity is displayed on the meter and
+ * never grants a win. Zero applied moves is never a win.
  */
 export function countsAsWin(input: {
   similarity: number;
   hereWord: string | null;
   goalWord: string;
+  movesUsed: number;
+  acceptedWords?: readonly string[];
 }): boolean {
-  if (positionWins(input.similarity)) return true;
+  if (input.movesUsed < 1) return false;
   const here = input.hereWord?.trim().toLowerCase() ?? "";
   if (here.length === 0) return false;
-  return here === input.goalWord.trim().toLowerCase();
+  const goal = input.goalWord.trim().toLowerCase();
+  if (isVariant(here, goal)) return true;
+  const accepted = input.acceptedWords ?? [];
+  return accepted.some((word) => isVariant(here, word));
 }
 
 /**

@@ -1,183 +1,58 @@
 #!/usr/bin/env python3
-"""Search for 3- and 4-step puzzles whose filtered label is the goal.
-
-Prints candidates. Does not write puzzles.json.
-"""
+"""Find 3- and 4-step puzzles where the goal is the label only at the end."""
 
 from __future__ import annotations
 
 import json
 import sys
+from itertools import product
 from pathlib import Path
 
 import numpy as np
+from wordfreq import top_n_list, zipf_frequency
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from wordelate.config import load_config
-from wordelate.labels import rank_labels
 from wordelate.mathutil import cosine
 from wordelate.pack import read_display_flags, read_pack
 from wordelate.paths import VOCAB_ROOT
 from wordelate.quantize import dequantize
-from wordelate.stemmer import is_variant
+from wordelate.stemmer import APPEND_SUFFIXES, is_variant, stem
 
-POOL = [
-    "man", "woman", "boy", "girl", "child", "baby", "adult", "father", "mother",
-    "son", "daughter", "brother", "sister", "uncle", "aunt", "prince", "princess",
-    "husband", "wife", "king", "queen", "royal", "crown", "palace", "parent",
-    "dog", "cat", "puppy", "kitten", "animal", "pet", "wolf", "horse", "bird",
-    "fish", "cow", "mouse", "lion", "bark", "meow",
-    "water", "sand", "ocean", "beach", "desert", "dry", "wet", "rain", "snow",
-    "ice", "hot", "cold", "sun", "moon", "day", "night", "summer", "winter",
-    "car", "road", "boat", "sky", "air", "fly", "drive", "plane", "train", "ship",
-    "doctor", "hospital", "school", "teacher", "student", "book", "nurse",
-    "paris", "france", "rome", "italy", "london", "england", "japan", "china",
-    "tokyo", "city", "capital",
-    "food", "bread", "milk", "cheese", "grape", "wine", "fruit",
-    "tree", "wood", "flower", "leaf", "seed", "garden",
-    "hand", "foot", "finger", "toe", "arm", "leg",
-    "big", "small", "young", "old", "strong", "weak",
-    "happy", "sad", "good", "bad", "love", "war",
-    "house", "home", "castle", "mountain", "forest", "river", "island",
-    "music", "song", "art", "money", "work", "play", "game",
-    "fire", "earth", "stone", "metal", "gold", "silver",
-    "red", "blue", "green", "white", "black",
-    "fast", "slow", "high", "low", "long", "short",
-]
+STOP = {
+    "the", "and", "that", "have", "for", "not", "with", "you", "this", "but",
+    "his", "from", "they", "say", "her", "she", "will", "one", "all", "would",
+    "there", "their", "what", "out", "about", "who", "get", "which", "when",
+    "make", "can", "like", "time", "just", "him", "know", "take", "people",
+    "into", "year", "your", "some", "could", "them", "see", "other", "than",
+    "then", "now", "look", "only", "come", "its", "over", "think", "also",
+    "back", "after", "use", "two", "how", "our", "work", "first", "well",
+    "way", "even", "new", "want", "because", "any", "these", "give", "day",
+    "most", "us", "were", "been", "has", "had", "was", "are", "were", "did",
+    "does", "doing", "been", "being", "very", "more", "much", "many", "such",
+    "own", "same", "too", "may", "might", "must", "shall", "should", "here",
+    "where", "why", "while", "during", "before", "again", "still", "off",
+    "down", "under", "between", "both", "each", "few", "those", "through",
+    "without", "another", "something", "nothing", "everything", "someone",
+    "anyone", "really", "going", "went", "got", "made", "said", "says",
+}
 
 TARGETS = [
-    ("boy", "queen"),
-    ("girl", "king"),
-    ("child", "queen"),
-    ("puppy", "kitten"),
-    ("kitten", "puppy"),
-    ("cat", "puppy"),
-    ("dog", "kitten"),
-    ("wolf", "kitten"),
-    ("paris", "tokyo"),
-    ("london", "rome"),
-    ("france", "tokyo"),
-    ("ocean", "desert"),
-    ("ocean", "camel"),
-    ("beach", "desert"),
-    ("winter", "beach"),
-    ("summer", "snow"),
-    ("snow", "beach"),
-    ("car", "airplane"),
-    ("car", "boat"),
-    ("car", "submarine"),
-    ("doctor", "teacher"),
-    ("fish", "bird"),
-    ("bird", "fish"),
-    ("water", "desert"),
-    ("day", "moon"),
-    ("seed", "flower"),
-    ("cow", "cheese"),
-    ("bread", "wine"),
-    ("hand", "toe"),
-    ("prince", "mother"),
-    ("son", "grandmother"),
-    ("mouse", "elephant"),
-    ("ant", "whale"),
-    ("walk", "swim"),
-    ("castle", "president"),
-    ("king", "mother"),
+    "sushi", "tokyo", "beijing", "rome", "beach", "desert", "snow", "airplane",
+    "boat", "submarine", "bird", "teacher", "queen", "king", "princess", "prince",
+    "puppy", "kitten", "lion", "wolf", "mother", "daughter", "son", "niece",
+    "winter", "summer", "flower", "tree", "cheese", "wine", "toe", "ice",
+    "elephant", "castle", "palace", "moon", "island", "nurse", "song", "silver",
 ]
 
-# Story equations to try even if the pool search misses them.
-HAND = [
-    ("boy", "queen", [(-1, "child"), (1, "king"), (-1, "man"), (1, "woman")]),
-    ("girl", "king", [(-1, "child"), (1, "queen"), (-1, "woman"), (1, "man")]),
-    ("child", "queen", [(1, "king"), (-1, "man"), (1, "woman")]),
-    ("puppy", "kitten", [(-1, "dog"), (1, "cat")]),
-    ("kitten", "puppy", [(-1, "cat"), (1, "dog")]),
-    ("cat", "puppy", [(-1, "meow"), (1, "bark"), (1, "baby")]),
-    ("cat", "puppy", [(-1, "cat"), (1, "dog"), (1, "baby")]),
-    ("dog", "kitten", [(-1, "bark"), (1, "meow"), (1, "baby")]),
-    ("dog", "kitten", [(1, "baby"), (-1, "dog"), (1, "cat")]),
-    ("wolf", "kitten", [(-1, "dog"), (1, "cat"), (1, "baby")]),
-    ("paris", "tokyo", [(-1, "france"), (1, "japan")]),
-    ("paris", "beijing", [(-1, "france"), (1, "china")]),
-    ("london", "rome", [(-1, "england"), (1, "italy")]),
-    ("france", "tokyo", [(-1, "paris"), (1, "japan"), (1, "city")]),
-    ("ocean", "desert", [(-1, "water"), (1, "sand")]),
-    ("ocean", "desert", [(-1, "water"), (1, "sand"), (-1, "wet"), (1, "dry")]),
-    ("ocean", "camel", [(-1, "water"), (1, "sand"), (1, "animal")]),
-    ("beach", "desert", [(-1, "water"), (1, "dry")]),
-    ("beach", "desert", [(-1, "ocean"), (1, "sand")]),
-    ("winter", "beach", [(-1, "cold"), (1, "hot"), (-1, "snow"), (1, "sand")]),
-    ("winter", "beach", [(-1, "snow"), (1, "sand"), (-1, "cold"), (1, "sun")]),
-    ("summer", "snow", [(-1, "hot"), (1, "cold"), (1, "winter")]),
-    ("snow", "beach", [(-1, "cold"), (1, "hot"), (-1, "winter"), (1, "sand")]),
-    ("car", "airplane", [(-1, "road"), (1, "sky")]),
-    ("car", "airplane", [(-1, "road"), (1, "air"), (1, "fly")]),
-    ("car", "boat", [(-1, "road"), (1, "water")]),
-    ("car", "submarine", [(-1, "road"), (1, "water"), (-1, "sky"), (1, "ocean")]),
-    ("doctor", "teacher", [(-1, "hospital"), (1, "school")]),
-    ("fish", "bird", [(-1, "water"), (1, "air")]),
-    ("fish", "bird", [(-1, "swim"), (1, "fly")]),
-    ("fish", "bird", [(-1, "ocean"), (1, "sky")]),
-    ("bird", "fish", [(-1, "sky"), (1, "water")]),
-    ("bird", "fish", [(-1, "air"), (1, "water")]),
-    ("water", "desert", [(-1, "wet"), (1, "dry"), (-1, "rain"), (1, "sand")]),
-    ("day", "moon", [(-1, "sun"), (1, "night")]),
-    ("seed", "flower", [(1, "water"), (1, "sun"), (-1, "earth")]),
-    ("seed", "flower", [(1, "garden"), (-1, "earth")]),
-    ("cow", "cheese", [(1, "milk"), (-1, "animal")]),
-    ("bread", "wine", [(-1, "flour"), (1, "grape")]),
-    ("hand", "toe", [(-1, "finger"), (1, "foot")]),
-    ("hand", "toe", [(-1, "arm"), (1, "leg"), (-1, "finger"), (1, "foot")]),
-    ("prince", "mother", [(-1, "boy"), (1, "woman"), (-1, "royal"), (1, "parent")]),
-    ("prince", "mother", [(-1, "king"), (1, "parent"), (-1, "man"), (1, "woman")]),
-    ("king", "mother", [(-1, "man"), (1, "woman"), (-1, "royal"), (1, "parent")]),
-    ("king", "mother", [(-1, "crown"), (1, "child"), (-1, "man"), (1, "woman")]),
-    ("mouse", "elephant", [(-1, "small"), (1, "big"), (1, "animal")]),
-    ("summer", "ski", [(-1, "hot"), (1, "cold"), (1, "snow")]),
-    ("cat", "horse", [(-1, "small"), (1, "big"), (-1, "pet"), (1, "animal")]),
-    ("dog", "lion", [(-1, "pet"), (1, "wild"), (1, "cat")]),
-    ("boy", "princess", [(-1, "man"), (1, "woman"), (1, "royal")]),
-    ("girl", "prince", [(-1, "woman"), (1, "man"), (1, "royal")]),
-    ("puppy", "queen", [(-1, "dog"), (1, "king"), (-1, "man"), (1, "woman")]),
-    ("kitten", "princess", [(-1, "cat"), (1, "prince"), (-1, "man"), (1, "woman")]),
-    ("paris", "sushi", [(-1, "france"), (1, "japan"), (1, "food")]),
-    ("italy", "sushi", [(-1, "rome"), (1, "japan"), (1, "food")]),
-    ("rome", "tokyo", [(-1, "italy"), (1, "japan")]),
-    ("berlin", "paris", [(-1, "germany"), (1, "france")]),
-    ("spain", "tokyo", [(-1, "madrid"), (1, "japan")]),
-    ("uncle", "niece", [(-1, "man"), (1, "woman"), (-1, "brother"), (1, "daughter")]),
-    ("father", "daughter", [(-1, "man"), (1, "woman"), (-1, "parent"), (1, "child")]),
-    ("father", "daughter", [(-1, "man"), (1, "girl")]),
-    ("brother", "aunt", [(-1, "boy"), (1, "woman"), (-1, "child"), (1, "parent")]),
-    ("day", "winter", [(-1, "sun"), (1, "cold"), (1, "snow")]),
-    ("night", "summer", [(-1, "moon"), (1, "sun"), (1, "hot")]),
-    ("car", "sail", [(-1, "road"), (1, "water"), (-1, "engine"), (1, "wind")]),
-    ("doctor", "queen", [(-1, "hospital"), (1, "palace"), (-1, "man"), (1, "woman")]),
-    ("tree", "bird", [(-1, "wood"), (1, "sky"), (1, "animal")]),
-    ("seed", "tree", [(1, "time"), (1, "water"), (-1, "small")]),
-    ("river", "ice", [(-1, "water"), (1, "cold"), (1, "winter")]),
-    ("ocean", "island", [(-1, "water"), (1, "land")]),
-    ("mountain", "island", [(-1, "land"), (1, "ocean"), (-1, "high")]),
-    ("house", "castle", [(1, "king"), (-1, "man"), (1, "stone")]),
-    ("house", "palace", [(1, "king"), (-1, "home"), (1, "royal")]),
-    ("happy", "tears", [(-1, "joy"), (1, "sad"), (1, "cry")]),
-    ("walk", "fly", [(-1, "foot"), (1, "wing")]),
-    ("walk", "swim", [(-1, "land"), (1, "water")]),
-    ("big", "tiny", [(-1, "large"), (1, "small")]),
-    ("strong", "weak", [(-1, "power"), (1, "soft")]),
-    ("sun", "moon", [(-1, "day"), (1, "night")]),
-    ("sun", "snow", [(-1, "hot"), (1, "cold"), (1, "winter")]),
-    ("fire", "ice", [(-1, "hot"), (1, "cold"), (1, "water")]),
-    ("gold", "silver", [(-1, "yellow"), (1, "white")]),
-    ("king", "princess", [(-1, "man"), (1, "woman"), (-1, "adult"), (1, "child")]),
-    ("king", "girl", [(-1, "man"), (1, "woman"), (-1, "adult"), (1, "child")]),
-    ("queen", "boy", [(-1, "woman"), (1, "man"), (-1, "adult"), (1, "child")]),
-    ("man", "princess", [(-1, "adult"), (1, "child"), (-1, "king"), (1, "queen")]),
-    ("woman", "prince", [(-1, "adult"), (1, "child"), (1, "king"), (-1, "queen")]),
-    ("cat", "wolf", [(-1, "pet"), (1, "wild"), (1, "dog")]),
-    ("dog", "lion", [(1, "cat"), (-1, "pet"), (1, "wild")]),
-    ("puppy", "lion", [(-1, "baby"), (-1, "dog"), (1, "cat"), (1, "wild")]),
-    ("kitten", "wolf", [(-1, "baby"), (-1, "cat"), (1, "dog"), (1, "wild")]),
+STARTS = [
+    "paris", "rome", "italy", "london", "madrid", "berlin", "france", "winter",
+    "summer", "sun", "snow", "ocean", "beach", "car", "fish", "bird", "doctor",
+    "boy", "girl", "child", "cat", "dog", "wolf", "kitten", "puppy", "king",
+    "queen", "father", "mother", "prince", "uncle", "day", "night", "seed",
+    "cow", "bread", "hand", "fire", "mouse", "house", "tree", "river", "walk",
+    "gold", "soldier", "book", "happy", "puppy",
 ]
 
 
@@ -188,106 +63,166 @@ def load():
     words, matrix, scales = read_pack(directory / "nearest.i8")
     display = read_display_flags(directory / "nearest.i8")
     rows = dequantize(matrix, scales).astype(np.float64)
+    norms = np.linalg.norm(rows, axis=1)
+    norms = np.maximum(norms, 1e-12)
+    unit = rows / norms[:, None]
     index = {word: i for i, word in enumerate(words)}
-    return cfg, words, rows, display, index
+    stems = [stem(word) for word in words]
+    by_stem: dict[str, list[int]] = {}
+    for i, key in enumerate(stems):
+        by_stem.setdefault(key, []).append(i)
+    return cfg, words, rows, unit, display.astype(bool), index, by_stem
 
 
-def equation(start: str, moves: list[tuple[int, str]]) -> str:
-    parts = [start]
-    for sign, word in moves:
-        parts.append(("+ " if sign > 0 else "- ") + word)
-    return " ".join(parts)
+def variant_indexes(words, index, by_stem, anchor: str) -> set[int]:
+    found = set(by_stem.get(stem(anchor), ()))
+    exact = index.get(anchor)
+    if exact is not None:
+        found.add(exact)
+    for suffix in APPEND_SUFFIXES:
+        longer = anchor + suffix
+        hit = index.get(longer)
+        if hit is not None:
+            found.add(hit)
+    for suffix in APPEND_SUFFIXES:
+        if anchor.endswith(suffix) and len(anchor) - len(suffix) >= 3:
+            shorter = anchor[: -len(suffix)]
+            hit = index.get(shorter)
+            if hit is not None and is_variant(anchor, shorter):
+                found.add(hit)
+    return found
 
 
-def position_of(rows, index, start: str, moves: list[tuple[int, str]]) -> np.ndarray:
+def primary_labels(words, unit, display, index, by_stem, position, anchors, goal, cutoff, count):
+    pos_norm = float(np.linalg.norm(position))
+    if pos_norm == 0.0:
+        return []
+    scores = unit @ (position / pos_norm)
+    anchor_rows = unit[[index[word] for word in anchors if word in index]]
+    nearest = anchor_rows @ unit.T
+    nearest = nearest.max(axis=0) if nearest.size else np.full(len(words), -1.0)
+    banned = set()
+    for anchor in anchors:
+        banned.update(variant_indexes(words, index, by_stem, anchor))
+    goal_i = index[goal]
+    allowed = display & (nearest <= cutoff)
+    allowed[goal_i] = True
+    if banned:
+        allowed[np.fromiter(banned, dtype=np.int64, count=len(banned))] = False
+    scores = np.where(allowed, scores, -np.inf)
+    k = min(count, int(np.isfinite(scores).sum()))
+    if k <= 0:
+        return []
+    pick = np.argpartition(-scores, k - 1)[:k]
+    pick = pick[np.argsort(-scores[pick])]
+    return [(words[i], float(scores[i])) for i in pick.tolist()]
+
+
+def apply_moves(rows, index, start, moves):
     position = rows[index[start]].copy()
     for sign, word in moves:
         position += sign * rows[index[word]]
     return position
 
 
-def labels_for(words, rows, display, index, position, start, moves, goal, cutoff, warm):
-    anchors = [(start, rows[index[start]])]
-    for _sign, word in moves:
-        anchors.append((word, rows[index[word]]))
-    similarity = float(cosine(position, rows[index[goal]]))
-    labels = rank_labels(words, rows, display, position, anchors, goal, cutoff, similarity, warm)
-    return similarity, [word for word, _score in labels]
-
-
-def subset_moves(moves: list[tuple[int, str]], mask: int) -> list[tuple[int, str]]:
-    return [step for bit, step in enumerate(moves) if mask & (1 << bit)]
-
-
-def necessary(words, rows, display, index, start, goal, moves, cutoff, warm) -> bool:
-    """Every proper subset must miss the goal label and stay under 0.75."""
+def subsets(moves):
     n = len(moves)
-    if n < 3:
-        return False
     full = (1 << n) - 1
-    for mask in range(full):
-        part = subset_moves(moves, mask)
-        if not part:
-            continue
-        position = position_of(rows, index, start, part)
-        similarity, shown = labels_for(
-            words, rows, display, index, position, start, part, goal, cutoff, warm
+    for mask in range(1, full):
+        yield [step for bit, step in enumerate(moves) if mask & (1 << bit)]
+
+
+def minimal_win(words, rows, unit, display, index, by_stem, start, goal, moves, cutoff, warm):
+    """Smallest subset (len>=3) whose primary label is the goal, if every smaller one misses."""
+    winning = []
+
+    def check(part):
+        position = apply_moves(rows, index, start, part)
+        similarity = float(cosine(position, rows[index[goal]]))
+        anchors = [start, *[word for _sign, word in part]]
+        count = 3 if similarity >= warm else 1
+        labels = primary_labels(
+            words, unit, display, index, by_stem, position, anchors, goal, cutoff, count
         )
-        if shown and shown[0] == goal:
-            return False
-        if similarity >= 0.75:
-            return False
-    return True
+        shown = [word for word, _score in labels]
+        return similarity, shown
+
+    # Walk subset sizes from small to large so the first hit is minimal.
+    ordered = sorted(subsets(moves), key=len)
+    # Include the full move list.
+    ordered.append(list(moves))
+    seen = set()
+    for part in ordered:
+        key = tuple(sorted(part))
+        if key in seen:
+            continue
+        seen.add(key)
+        similarity, shown = check(part)
+        if shown and shown[0] == goal and similarity < 0.75:
+            # Confirm nothing smaller already won. Because we go by size, any earlier
+            # win would have been returned. Similarity >= 0.75 also wins the game
+            # even with a different label, so reject those smaller positions.
+            return part, similarity, shown
+        if similarity >= 0.75 and part != list(moves):
+            # A shorter position already clears the hidden line.
+            if len(part) < len(moves):
+                return None
+    return None
 
 
-def legal(index, start: str, goal: str, moves: list[tuple[int, str]]) -> bool:
-    if len(moves) < 3:
-        return False
-    seen = {start, goal}
-    for _sign, word in moves:
-        if word not in index or word in seen:
-            return False
-        if is_variant(word, start) or is_variant(word, goal):
-            return False
-        for previous in seen:
-            if is_variant(word, previous):
-                return False
-        seen.add(word)
-    # Opposite pair on the same word cannot happen because words are unique.
-    return True
+def content_pool(index, display_words, extra, limit=110):
+    pool = []
+    for word in top_n_list("en", 4000):
+        if word in STOP or len(word) < 3:
+            continue
+        if word not in index or word not in display_words:
+            continue
+        if zipf_frequency(word, "en") < 3.6:
+            continue
+        pool.append(word)
+        if len(pool) >= limit:
+            break
+    for word in extra:
+        if word in index and word not in pool and word not in STOP:
+            pool.append(word)
+    return pool
 
 
-def search_pool(words, rows, display, index, pool_words, targets, cutoff, warm):
-    pool = [word for word in pool_words if word in index]
-    pool_idx = np.array([index[word] for word in pool], dtype=np.int64)
-    vecs = rows[pool_idx]
-    gram = vecs @ vecs.T
+def search_length(rows, index, start, goal, pool, steps, floor):
+    pool = [word for word in pool if word not in (start, goal) and not is_variant(word, start) and not is_variant(word, goal)]
+    # Drop operands that are variants of each other later, per tuple.
+    if len(pool) < steps:
+        return []
+    vecs = np.stack([rows[index[word]] for word in pool]).astype(np.float32)
+    start_vec = rows[index[start]].astype(np.float32)
+    goal_vec = rows[index[goal]].astype(np.float32)
+    goal_norm = float(np.linalg.norm(goal_vec))
+    dot_g = vecs @ goal_vec
+    dot_s = vecs @ start_vec
     row_sq = np.einsum("ij,ij->i", vecs, vecs)
-    print(f"pool {len(pool)}", flush=True)
-    found = []
-    for start, goal in targets:
-        if start not in index or goal not in index:
-            print(f"missing {start}->{goal}", flush=True)
-            continue
-        start_vec = rows[index[start]]
-        goal_vec = rows[index[goal]]
-        goal_norm = float(np.linalg.norm(goal_vec))
-        start_sq = float(np.dot(start_vec, start_vec))
-        dot_sg = float(np.dot(start_vec, goal_vec))
-        dot_g = vecs @ goal_vec
-        dot_s = vecs @ start_vec
-        banned = {start, goal}
-        keep_i = np.array(
-            [
-                i
-                for i, word in enumerate(pool)
-                if word not in banned and not is_variant(word, start) and not is_variant(word, goal)
-            ],
-            dtype=np.int64,
-        )
-        hits = []
-        p = len(pool)
-        for signs in ((-1, 1, 1), (1, -1, 1), (1, 1, -1), (-1, -1, 1), (-1, 1, -1), (1, -1, -1)):
+    gram = vecs @ vecs.T
+    start_sq = float(np.dot(start_vec, start_vec))
+    dot_sg = float(np.dot(start_vec, goal_vec))
+    p = len(pool)
+    best: list[tuple[float, list[tuple[int, str]]]] = []
+
+    def consider(score, moves):
+        if score < floor:
+            return
+        used = [word for _sign, word in moves]
+        if len(set(used)) < len(used):
+            return
+        if any(is_variant(a, b) for a, b in product(used, repeat=2) if a != b):
+            return
+        # Each operand should sit near the start or the goal, so the step is readable.
+        for word in used:
+            vec = rows[index[word]]
+            if max(cosine(vec, rows[index[start]]), cosine(vec, rows[index[goal]])) < 0.18:
+                return
+        best.append((score, moves))
+
+    if steps == 3:
+        for signs in product((-1, 1), repeat=3):
             s1, s2, s3 = signs
             sq = (
                 start_sq
@@ -307,97 +242,169 @@ def search_pool(words, rows, display, index, pool_words, targets, cutoff, warm):
                 + s2 * dot_g[None, :, None]
                 + s3 * dot_g[None, None, :]
             )
-            cos = num / (np.sqrt(np.maximum(sq, 1e-12)) * goal_norm)
-            # Distinct operands, and only the allowed pool slots on axis 0 so we
-            # can slice the cube down before picking.
-            allow = np.zeros(p, dtype=bool)
-            allow[keep_i] = True
-            cos = cos[allow]
-            allowed_words = [pool[i] for i in keep_i.tolist()]
+            cos = num / (np.sqrt(np.maximum(sq, 1e-8)) * goal_norm)
             flat = cos.reshape(-1)
-            # Top of this sign pattern.
-            k = min(25, flat.size)
-            pick = np.argpartition(-flat, k - 1)[:k]
-            n2 = p
-            n0 = len(allowed_words)
+            k = min(12, flat.size - 1)
+            pick = np.argpartition(-flat, k)[: k + 1]
+            n = p
             for slot in pick.tolist():
-                score = float(flat[slot])
-                if score < 0.62:
+                i = slot // (n * n)
+                rem = slot % (n * n)
+                j = rem // n
+                m = rem % n
+                if len({i, j, m}) < 3:
                     continue
-                i0 = slot // (n2 * n2)
-                rem = slot % (n2 * n2)
-                j = rem // n2
-                k3 = rem % n2
-                words3 = (allowed_words[i0], pool[j], pool[k3])
-                if len(set(words3)) < 3:
+                consider(
+                    float(flat[slot]),
+                    [(s1, pool[i]), (s2, pool[j]), (s3, pool[m])],
+                )
+    else:
+        for signs in product((-1, 1), repeat=4):
+            s1, s2, s3, s4 = signs
+            local: list[tuple[float, tuple[int, int, int, int]]] = []
+            for i in range(p):
+                base = start_vec + s1 * vecs[i]
+                base_sq = float(np.dot(base, base))
+                base_g = float(np.dot(base, goal_vec))
+                base_dots = vecs @ base
+                sq = (
+                    base_sq
+                    + row_sq[:, None, None]
+                    + row_sq[None, :, None]
+                    + row_sq[None, None, :]
+                    + 2 * s2 * base_dots[:, None, None]
+                    + 2 * s3 * base_dots[None, :, None]
+                    + 2 * s4 * base_dots[None, None, :]
+                    + 2 * s2 * s3 * gram[:, :, None]
+                    + 2 * s2 * s4 * gram[:, None, :]
+                    + 2 * s3 * s4 * gram[None, :, :]
+                )
+                num = (
+                    base_g
+                    + s2 * dot_g[:, None, None]
+                    + s3 * dot_g[None, :, None]
+                    + s4 * dot_g[None, None, :]
+                )
+                cos = num / (np.sqrt(np.maximum(sq, 1e-8)) * goal_norm)
+                flat = np.asarray(cos, dtype=np.float32).reshape(-1)
+                kth = min(3, flat.size - 1)
+                pick = np.argpartition(-flat, kth)[: kth + 1]
+                for slot in pick.tolist():
+                    score = float(flat[slot])
+                    if score < floor:
+                        continue
+                    j = slot // (p * p)
+                    rem = slot % (p * p)
+                    k = rem // p
+                    m = rem % p
+                    local.append((score, (i, j, k, m)))
+            local.sort(reverse=True)
+            for score, (i, j, k, m) in local[:8]:
+                if len({i, j, k, m}) < 4:
                     continue
-                moves = [(s1, words3[0]), (s2, words3[1]), (s3, words3[2])]
-                if not legal(index, start, goal, moves):
-                    continue
-                hits.append((score, moves))
-        hits.sort(key=lambda item: item[0], reverse=True)
-        # Unique move multisets.
-        seen = set()
-        checked = 0
-        for score, moves in hits:
-            key = tuple(sorted((sign, word) for sign, word in moves))
-            if key in seen:
-                continue
-            seen.add(key)
-            checked += 1
-            if checked > 12:
-                break
-            position = position_of(rows, index, start, moves)
-            similarity, shown = labels_for(
-                words, rows, display, index, position, start, moves, goal, cutoff, warm
-            )
-            primary = shown[0] if shown else None
-            if primary != goal:
-                continue
-            if not necessary(words, rows, display, index, start, goal, moves, cutoff, warm):
-                print(f"  padded {equation(start, moves)} -> {goal} {similarity:.3f} {shown}", flush=True)
-                continue
-            print(f"OK {equation(start, moves)} -> {goal} {similarity:.3f} {shown}", flush=True)
-            found.append((start, goal, moves, similarity, shown))
-            break
-        else:
-            print(f"-- {start} -> {goal} no 3-step label hit (best raw {hits[0][0]:.3f})" if hits else f"-- {start} -> {goal} none", flush=True)
-    return found
-
-
-def try_hand(words, rows, display, index, cutoff, warm):
-    print("hand equations", flush=True)
-    found = []
-    for start, goal, moves in HAND:
-        if not legal(index, start, goal, moves):
-            missing = [w for w in [start, goal, *(word for _s, word in moves)] if w not in index]
-            if missing:
-                print(f"skip {start}->{goal} missing {missing}", flush=True)
-            else:
-                print(f"skip {equation(start, moves)} illegal", flush=True)
+                consider(
+                    score,
+                    [(s1, pool[i]), (s2, pool[j]), (s3, pool[k]), (s4, pool[m])],
+                )
+    best.sort(key=lambda item: item[0], reverse=True)
+    uniq = []
+    seen = set()
+    for score, moves in best:
+        key = tuple(sorted(moves))
+        if key in seen:
             continue
-        position = position_of(rows, index, start, moves)
-        similarity, shown = labels_for(
-            words, rows, display, index, position, start, moves, goal, cutoff, warm
-        )
-        primary = shown[0] if shown else None
-        mark = "OK" if primary == goal else "  "
-        print(f"{mark} {equation(start, moves)} -> {goal} {similarity:.3f} {shown}", flush=True)
-        if primary == goal:
-            needed = necessary(words, rows, display, index, start, goal, moves, cutoff, warm)
-            print(f"   necessary={needed}", flush=True)
-            if needed:
-                found.append((start, goal, moves, similarity, shown))
-    return found
+        seen.add(key)
+        uniq.append((score, moves))
+        if len(uniq) >= 8:
+            break
+    return uniq
+
+
+def readable_order(rows, index, start, goal, moves):
+    negatives = [(sign, word) for sign, word in moves if sign < 0]
+    positives = [(sign, word) for sign, word in moves if sign > 0]
+    negatives.sort(key=lambda item: cosine(rows[index[item[1]]], rows[index[start]]), reverse=True)
+    positives.sort(key=lambda item: cosine(rows[index[item[1]]], rows[index[goal]]), reverse=True)
+    return negatives + positives
+
+
+def equation(start, moves, goal):
+    parts = [start]
+    for sign, word in moves:
+        parts.append(("+ " if sign > 0 else "- ") + word)
+    return " ".join(parts) + f" -> {goal}"
 
 
 def main() -> None:
-    cfg, words, rows, display, index = load()
+    cfg, words, rows, unit, display, index, by_stem = load()
     cutoff = float(cfg["labelNearDuplicateCutoff"])
     warm = float(cfg["labelWarmSimilarity"])
-    try_hand(words, rows, display, index, cutoff, warm)
-    print("--- search ---", flush=True)
-    search_pool(words, rows, display, index, POOL, TARGETS, cutoff, warm)
+    display_words = {word for word, flag in zip(words, display) if flag}
+    extras = [
+        "sushi", "tokyo", "beijing", "japan", "china", "france", "italy", "rome",
+        "paris", "london", "england", "spain", "madrid", "germany", "berlin",
+        "food", "rice", "fish", "sand", "snow", "beach", "desert", "airplane",
+        "boat", "submarine", "queen", "king", "princess", "puppy", "kitten",
+        "lion", "wolf", "mother", "daughter", "cheese", "wine", "castle",
+        "palace", "moon", "island", "nurse", "flower", "elephant", "teacher",
+        "hospital", "school", "baby", "royal", "crown", "meow", "bark",
+    ]
+    pool = content_pool(index, display_words, extras, 100)
+    print(f"pool {len(pool)}", flush=True)
+    pairs = []
+    for start in STARTS:
+        for goal in TARGETS:
+            if start == goal or start not in index or goal not in index:
+                continue
+            if is_variant(start, goal):
+                continue
+            direct = float(cosine(rows[index[start]], rows[index[goal]]))
+            # Skip pairs that are already neighbors. Those are one-step puzzles.
+            if direct >= 0.55 or direct < 0.12:
+                continue
+            pairs.append((direct, start, goal))
+    pairs.sort(key=lambda item: abs(item[0] - 0.32))
+    # Spread across goals so one goal does not eat the whole search.
+    chosen = []
+    per_goal: dict[str, int] = {}
+    for direct, start, goal in pairs:
+        if per_goal.get(goal, 0) >= 2:
+            continue
+        per_goal[goal] = per_goal.get(goal, 0) + 1
+        chosen.append((start, goal))
+        if len(chosen) >= 36:
+            break
+    print(f"pairs {len(chosen)}", flush=True)
+    kept = []
+    for start, goal in chosen:
+        found = None
+        for steps in (3,):
+            if steps == 4 and found:
+                break
+            floor = 0.50 if steps == 3 else 0.52
+            # 4-step uses a shorter pool so the cube stays cheap.
+            use_pool = pool if steps == 3 else pool[:70]
+            candidates = search_length(rows, index, start, goal, use_pool, steps, floor)
+            for _score, moves in candidates:
+                hit = minimal_win(
+                    words, rows, unit, display, index, by_stem, start, goal, moves, cutoff, warm
+                )
+                if not hit:
+                    continue
+                part, similarity, shown = hit
+                if len(part) < 3:
+                    continue
+                ordered = readable_order(rows, index, start, goal, part)
+                print(
+                    f"OK {equation(start, ordered, goal)} {similarity:.3f} {shown}",
+                    flush=True,
+                )
+                kept.append((start, goal, ordered, similarity, shown))
+                found = True
+                break
+        if not found:
+            print(f"-- {start} -> {goal}", flush=True)
+    print(f"kept {len(kept)}", flush=True)
 
 
 if __name__ == "__main__":

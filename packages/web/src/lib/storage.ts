@@ -2,6 +2,7 @@ import type { Move } from "@wordelate/game-math";
 
 export const WIN_SIMILARITY_KEY = "wordelate.winSimilarity";
 export const PLAYER_ID_KEY = "wordelate.playerId";
+export const PATH_VIEW_KEY = "wordelate.path3d";
 export const DEFAULT_WIN_SIMILARITY = 0.95;
 export const MIN_WIN_SIMILARITY = 0.5;
 export const MAX_WIN_SIMILARITY = 1;
@@ -122,6 +123,17 @@ export function loadGame(puzzleId: string): SavedGame | null {
 
 export function saveGame(puzzleId: string, game: SavedGame): void {
   storageSet(gameKey(puzzleId), JSON.stringify(game));
+}
+
+/** Shown unless the player has turned the path off. */
+export function readPathView(): boolean {
+  const stored = storageGet(PATH_VIEW_KEY);
+  if (stored == null) return true;
+  return stored === "1";
+}
+
+export function writePathView(enabled: boolean): void {
+  storageSet(PATH_VIEW_KEY, enabled ? "1" : "0");
 }
 
 export function getPlayerId(): string {

@@ -11,10 +11,12 @@
   },
   "dependencies": {
     "@wordelate/game-math": "0.0.0",
-    "preact": "^10.26.9"
+    "preact": "^10.26.9",
+    "three": "^0.187.0"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.1",
+    "@types/three": "^0.187.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
     "vitest": "^5.1.1"
