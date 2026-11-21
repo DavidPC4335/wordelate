@@ -1383,6 +1383,7 @@ button:focus-visible, input:focus-visible, summary:focus-visible, .dot:focus-vis
   .pill { height: 2.2rem; padding: 0 0.6rem 0 0.5rem; font-size: 0.95rem; }
   .icon-btn { width: 2.2rem; height: 2.2rem; }
   .admin-link { height: 2.2rem; padding: 0 0.6rem; font-size: 0.85rem; }
+  .admin-wrap .popover { position: fixed; top: 6.5rem; left: 0.6rem; right: 0.6rem; width: auto; }
   .modal-body > :not(.modal-close) { padding: 1.2rem 1rem 1.2rem; }
   .looks { grid-template-columns: 1fr 1fr; gap: 0.6rem; }
   .look-info { padding: 0.55rem 0.6rem 0.7rem; }
@@ -1604,13 +1605,46 @@ button:focus-visible, input:focus-visible, summary:focus-visible, .dot:focus-vis
 .check { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.88rem; font-weight: 700; cursor: pointer; }
 .check input { width: 1.15rem; height: 1.15rem; flex: none; accent-color: var(--primary-deep); cursor: pointer; }
 .board-cheer .picture-toggle { justify-items: center; color: var(--ink); }
+.field-hint { color: var(--ink-soft); font-size: 0.82rem; font-weight: 600; line-height: 1.35; }
+.admin-id { margin: 0.15rem 0 0.8rem; }
 .admin-people, .admin-stack, .admin-scores, .admin-audit, .admin-looks, .admin-steps { display: grid; gap: 0.35rem; }
 .admin-people li, .admin-scores li, .admin-steps li { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
-.admin-stack, .admin-scores { max-height: 18rem; overflow: auto; padding-right: 0.2rem; }
-.admin-day { font-variant-numeric: tabular-nums; color: var(--ink-soft); margin-right: 0.4rem; }
-.admin-day-locked { color: var(--ink-soft); }
-.admin-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.6rem; }
+.admin-scores { max-height: 18rem; overflow: auto; padding-right: 0.2rem; }
+.admin-pager { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin: 0.2rem 0 0.4rem; font-weight: 800; }
+.admin-page-count { color: var(--ink-soft); font-weight: 700; }
+.admin-slot {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  min-height: 2.8rem;
+  padding: 0.4rem 0.85rem;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.admin-slot:hover:not(:disabled) { border-color: var(--primary); }
+.admin-slot:disabled { opacity: 0.55; cursor: not-allowed; }
+.admin-slot-on { border-color: var(--primary); background: var(--primary-tint); }
+.admin-day { flex: none; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.admin-pair { flex: 1; min-width: 0; }
+.admin-lock { flex: none; color: var(--ink-soft); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+.admin-form { display: grid; grid-template-columns: 1fr; gap: 0.85rem; margin-top: 0.7rem; }
+@media (min-width: 720px) {
+  .admin-form { grid-template-columns: 1fr 1fr; }
+  .admin-form .field:last-child { grid-column: 1 / -1; }
+}
+.admin-steps { margin-top: 0.45rem; }
 .admin-steps select, .admin-form .field-input, .admin-steps .field-input { min-width: 0; }
+.admin-add { display: grid; justify-items: start; gap: 0.75rem; margin-top: 0.9rem; }
+.admin-wrap { position: relative; }
+.admin-menu { display: grid; gap: 0.55rem; }
+.admin-pop .btn { width: 100%; justify-content: center; }
 .admin-audit li { display: grid; gap: 0.1rem; color: var(--ink-soft); font-size: 0.88rem; font-weight: 700; }
 .admin-looks { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
 .profile-edit { display: grid; gap: 0.4rem; }

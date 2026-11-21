@@ -2,7 +2,6 @@ import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { Move } from "@wordelate/game-math";
 import { cosine, replay } from "@wordelate/game-math";
-import { Admin } from "./components/admin.js";
 import { BoardDialog } from "./components/board-dialog.js";
 import type { BoardDay } from "./components/board-dialog.js";
 import { Equation } from "./components/equation.js";
@@ -131,7 +130,7 @@ export function App() {
   const [gaveUp, setGaveUp] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
-  const [adminOpen, setAdminOpen] = useState(false);
+  const [practice, setPractice] = useState(false);
   const [archiveDay, setArchiveDay] = useState<string | null>(null);
   // The tutorial greets a brand-new player once. Closing it, or playing, ends the greeting.
   const [howToOpen, setHowToOpen] = useState(() => !hasGameHistory() && !readHowToSeen());
@@ -239,9 +238,9 @@ export function App() {
   }, [pack, puzzle, moves]);
 
   useEffect(() => {
-    if (!hydrated || !puzzle) return;
+    if (!hydrated || !puzzle || practice) return;
     saveGame(puzzle.id, { moves, gaveUp });
-  }, [hydrated, puzzle, moves, gaveUp]);
+  }, [hydrated, puzzle, moves, gaveUp, practice]);
 
   useEffect(() => {
     if (!pack || !puzzle || !played || !played.ok) {
@@ -311,6 +310,24 @@ export function App() {
     if (movesUsed < 1 || played.equationWords.length < 1) return;
     armedPuzzle.current = null;
     const todayKey = calendarDay(new Date());
+    if (practice) {
+      const stats = currentRewardStats(scoreLog, streakState);
+      setWinReport({
+        start: puzzle.start,
+        goal: puzzle.goal,
+        moves: movesUsed,
+        par: puzzle.par > 0 ? puzzle.par : null,
+        earned: 0,
+        totalPoints: stats.totalPoints,
+        streak: streakAsOf(streakState, todayKey),
+        fresh: [],
+        next: nextReward(stats),
+        ranked: false,
+      });
+      setBoard(null);
+      setBoardState("off");
+      return;
+    }
     const todayPuzzle = puzzles ? puzzleAt(puzzles, todayKey) : null;
     const ranked = todayPuzzle != null && puzzle.id === todayPuzzle.id;
     const recorded = ranked
@@ -370,7 +387,7 @@ export function App() {
     } catch {
       // Vibration is a nicety. Some browsers refuse it.
     }
-  }, [archiveDay, gaveUp, hydrated, moves, played, puzzle, puzzles, scoreLog, streakState, won]);
+  }, [archiveDay, gaveUp, hydrated, moves, played, practice, puzzle, puzzles, scoreLog, streakState, won]);
 
   // Let the graph's own sparkle play for a moment before the results card opens.
   useEffect(() => {
@@ -397,22 +414,9 @@ export function App() {
     setFormKey((key) => key + 1);
   }
 
-  /** Open a puzzle from the list. Earlier progress on it comes back. */
-  function openPuzzle(id: string) {
-    setCustom(null);
-    startBoard(id, loadGame(id));
-  }
-
-  /** Wipe a puzzle and start it over. */
-  function selectPuzzle(id: string) {
-    setCustom(null);
-    saveGame(id, { moves: [], gaveUp: false });
-    startBoard(id, null);
-  }
-
   function resetPuzzle() {
     if (!puzzle) return;
-    saveGame(puzzle.id, { moves: [], gaveUp: false });
+    if (!practice) saveGame(puzzle.id, { moves: [], gaveUp: false });
     startBoard(puzzle.id, null);
   }
 
@@ -421,28 +425,25 @@ export function App() {
     const todayKey = calendarDay(new Date());
     const scheduled = puzzleAt(puzzles, day);
     if (!scheduled) return;
+    setPractice(false);
     setCustom(null);
     setArchiveDay(day === todayKey ? null : day);
     startBoard(scheduled.id, loadGame(scheduled.id));
     setBoardOpen(false);
   }
 
-  function playPair(startRaw: string, goalRaw: string): string | null {
-    if (!pack || !puzzles) return "Vocabulary is still loading.";
+  /** A free pair for an admin. It never writes a score, a streak, or saved progress. */
+  function playTest(startRaw: string, goalRaw: string): string | null {
+    if (!pack) return "Vocabulary is still loading.";
     const start = closestWord(pack, startRaw);
     const goal = closestWord(pack, goalRaw);
     if (!start || !goal) return "Type a start word and a goal word from the vocabulary.";
-    const existing = puzzles.find((item) => item.start === start && item.goal === goal);
-    if (existing) {
-      selectPuzzle(existing.id);
-    } else {
-      const made = customPuzzle(start, goal);
-      setCustom(made);
-      saveGame(made.id, { moves: [], gaveUp: false });
-      startBoard(made.id, null);
-    }
+    if (start === goal) return "Pick two different words.";
+    const made = customPuzzle(start, goal);
+    setPractice(true);
+    setCustom(made);
     setArchiveDay(null);
-    setAdminOpen(false);
+    startBoard(made.id, null);
     return null;
   }
 
@@ -502,7 +503,6 @@ export function App() {
   const todayKey = calendarDay(new Date());
   const streakCount = streakAsOf(streakState, todayKey);
   const rewardStats = useMemo(() => currentRewardStats(scoreLog, streakState), [scoreLog, streakState]);
-  const solvedIds = useMemo(() => new Set(scoreLog.map((entry) => entry.puzzleId)), [scoreLog]);
   const boardDays = useMemo<BoardDay[]>(() => {
     if (!puzzles) return [];
     const days: BoardDay[] = [];
@@ -530,30 +530,10 @@ export function App() {
           onRewards={() => setRewardsOpen(true)}
           onBoard={() => setBoardOpen(true)}
           onHelp={() => setHowToOpen(true)}
-          onPractice={staff ? () => setAdminOpen(true) : undefined}
+          onPlayTest={staff ? playTest : undefined}
           onAdmin={staff ? () => navigate("/admin") : undefined}
         />
         {body}
-        <Admin
-          open={adminOpen}
-          onClose={() => setAdminOpen(false)}
-          puzzles={puzzles ?? []}
-          currentId={puzzle?.id ?? ""}
-          solvedIds={solvedIds}
-          revealed={revealed}
-          onSelect={(id) => {
-            setArchiveDay(null);
-            openPuzzle(id);
-            setAdminOpen(false);
-          }}
-          onReset={() => {
-            resetPuzzle();
-            setAdminOpen(false);
-          }}
-          onReveal={() => setRevealed(true)}
-          onHide={() => setRevealed(false)}
-          onPlay={playPair}
-        />
         <RewardsDialog
           open={rewardsOpen}
           onClose={() => setRewardsOpen(false)}
@@ -702,7 +682,14 @@ export function App() {
       </main>
       <section class="dock" aria-label="Your moves">
         <div class="dock-inner" data-stage-overlay>
-          {archiveDay ? (
+          {practice ? (
+            <p class="practice-banner">
+              Playtest. Nothing is saved.
+              <button type="button" class="text-button" onClick={() => playDay(todayKey)}>
+                Back to today
+              </button>
+            </p>
+          ) : archiveDay ? (
             <p class="practice-banner">
               Practice. This score stays off the board.
               <button type="button" class="text-button" onClick={() => playDay(todayKey)}>

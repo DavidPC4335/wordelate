@@ -1,3 +1,4 @@
+import type { ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { adminApi } from "../lib/account-api.js";
 import type { AdminOverview, QuestionSlot } from "../lib/admin.js";
@@ -27,13 +28,50 @@ const EMPTY: Draft = {
   start: "",
   goal: "",
   here: "",
-  similarity: "",
+  similarity: "75",
   accepted: "",
   steps: [
     { op: "-", word: "" },
     { op: "+", word: "" },
   ],
 };
+
+const PAGE_SIZE = 7;
+
+function wordId(word: string): string {
+  return word.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+/** New questions take their id from the two words, so the field does not have to be typed. */
+function autoId(start: string, goal: string): string {
+  const left = wordId(start);
+  const right = wordId(goal);
+  if (!left || !right) return "";
+  return `${left}-${right}`;
+}
+
+function percentText(similarity: number): string {
+  return String(Math.round(similarity * 10000) / 100);
+}
+
+function shortDay(day: string): string {
+  const [year, month, date] = day.split("-").map(Number);
+  return new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, date ?? 1)).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function Field({ label, hint, children }: { label: string; hint: string; children: ComponentChildren }) {
+  return (
+    <label class="field">
+      <span class="field-label">{label}</span>
+      {children}
+      <span class="field-hint">{hint}</span>
+    </label>
+  );
+}
 
 function draftFrom(slot: QuestionSlot): Draft {
   return {
@@ -42,25 +80,35 @@ function draftFrom(slot: QuestionSlot): Draft {
     start: slot.puzzle.start,
     goal: slot.puzzle.goal,
     here: slot.puzzle.here,
-    similarity: String(slot.puzzle.solutionSimilarity),
+    similarity: percentText(slot.puzzle.solutionSimilarity),
     accepted: slot.puzzle.accepted.join(", "),
     steps: slot.puzzle.solution.map((step) => ({ op: step.op, word: step.word })),
   };
 }
 
 function puzzleFromDraft(draft: Draft): Puzzle | null {
-  const similarity = Number(draft.similarity);
+  const percent = Number(draft.similarity);
   const accepted = draft.accepted.split(",").map((word) => word.trim().toLowerCase()).filter((word) => word.length > 0);
-  const steps = draft.steps.filter((step) => step.word.trim().length > 0).map((step) => ({ op: step.op, word: step.word.trim().toLowerCase() }));
-  if (!Number.isFinite(similarity) || steps.length === 0) return null;
+  const steps = draft.steps
+    .filter((step) => step.word.trim().length > 0)
+    .map((step) => ({ op: step.op, word: step.word.trim().toLowerCase() }));
+  const id = draft.position === null ? autoId(draft.start, draft.goal) : draft.id.trim().toLowerCase();
+  const start = draft.start.trim().toLowerCase();
+  const goal = draft.goal.trim().toLowerCase();
+  const here = draft.here.trim().toLowerCase();
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) return null;
+  if (!/^[a-z]+$/.test(start) || !/^[a-z]+$/.test(goal) || !/^[a-z]+$/.test(here)) return null;
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) return null;
+  if (accepted.length < 2 || accepted.length > 3 || accepted.some((word) => !/^[a-z]+$/.test(word))) return null;
+  if (steps.length === 0 || steps.some((step) => !/^[a-z]+$/.test(step.word))) return null;
   return {
-    id: draft.id.trim().toLowerCase(),
-    start: draft.start.trim().toLowerCase(),
-    goal: draft.goal.trim().toLowerCase(),
+    id,
+    start,
+    goal,
     par: steps.length,
     solution: steps,
-    solutionSimilarity: similarity,
-    here: draft.here.trim().toLowerCase(),
+    solutionSimilarity: Math.round(percent * 100) / 10000,
+    here,
     accepted,
   };
 }
@@ -70,6 +118,7 @@ export function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<"loading" | "in" | "out" | "denied">("loading");
   const [showLocked, setShowLocked] = useState(false);
+  const [page, setPage] = useState(0);
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState("");
@@ -104,7 +153,7 @@ export function AdminPage() {
   async function saveQuestion() {
     const puzzle = puzzleFromDraft(draft);
     if (!puzzle) {
-      setError("Fill in the id, both words, the landing word, a similarity and at least one step.");
+      setError("Use single words, a similarity from 0 to 100, 2 or 3 accepted words, and at least one step.");
       return;
     }
     setBusy(true);
@@ -115,6 +164,11 @@ export function AdminPage() {
       return;
     }
     apply(reply.value);
+    if (draft.position === null) {
+      const upcomingCount = reply.value.questions.filter((slot) => !slot.locked).length;
+      setShowLocked(false);
+      setPage(Math.max(0, Math.ceil(upcomingCount / PAGE_SIZE) - 1));
+    }
     setDraft(EMPTY);
   }
 
@@ -147,7 +201,13 @@ export function AdminPage() {
     );
   }
 
-  const visible = data.questions.filter((slot) => showLocked || !slot.locked);
+  const pool = data.questions.filter((slot) => (showLocked ? slot.locked : !slot.locked));
+  const pageCount = Math.max(1, Math.ceil(pool.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const slice = pool.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const rangeStart = slice[0];
+  const rangeEnd = slice[slice.length - 1];
+  const shownId = draft.position === null ? autoId(draft.start, draft.goal) : draft.id;
 
   return (
     <PageFrame title="Admin">
@@ -157,107 +217,105 @@ export function AdminPage() {
         </p>
       ) : null}
       <p class="card-text">
-        Signed in as {data.email}. {data.role === "super" ? "You can also add and remove admins." : "You can edit upcoming questions and your own account."}{" "}
+        Signed in as {data.email}.{" "}
         {upcoming < 14 ? `Only ${Math.max(0, upcoming)} days of questions are left after today.` : `${upcoming} upcoming days are ready.`}
       </p>
 
-      <section class="card" aria-labelledby="admins-title">
-        <h2 class="card-title" id="admins-title">Admins</h2>
-        <ul class="admin-people">
-          {data.admins.map((person) => (
-            <li key={person.email}>
-              <span>
-                {person.email}
-                {person.super ? " · superadmin" : person.addedBy ? ` · added by ${person.addedBy}` : ""}
-              </span>
-              {data.role === "super" && !person.super ? (
-                <button
-                  type="button"
-                  class="text-button text-danger"
-                  onClick={() => {
-                    setBusy(true);
-                    void adminApi.removeAdmin(person.email).then((reply) => {
-                      setBusy(false);
-                      if (reply.ok) apply(reply.value);
-                      else setError(reply.error);
-                    });
-                  }}
-                >
-                  Remove
-                </button>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-        {data.role === "super" ? (
-          <form
-            class="cheer-row"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setBusy(true);
-              void adminApi.addAdmin(email).then((reply) => {
-                setBusy(false);
-                if (reply.ok) {
-                  setEmail("");
-                  apply(reply.value);
-                } else setError(reply.error);
-              });
-            }}
-          >
-            <input
-              class="cheer-input"
-              type="email"
-              value={email}
-              placeholder="name@example.com"
-              autoComplete="off"
-              onInput={(event) => setEmail(event.currentTarget.value)}
-            />
-            <button type="submit" class="btn btn-small" disabled={busy || email.trim().length === 0}>
-              Add admin
-            </button>
-          </form>
-        ) : (
-          <p class="card-note">Only the superadmin can change this list.</p>
-        )}
-      </section>
-
       <section class="card" aria-labelledby="questions-title">
-        <h2 class="card-title" id="questions-title">Questions</h2>
+        <h2 class="card-title" id="questions-title">{showLocked ? "Locked days" : "Upcoming questions"}</h2>
         <p class="card-text">
-          The list is a stack: the first question was the first day, and each one after it is the next day. Today and every earlier day are locked. A new question is added at the end.
+          {showLocked
+            ? "These days have already started, so their questions stay as they are."
+            : "Each question is one day, in order. Pick a day to change it, or add a new one at the end. Today cannot be changed."}
         </p>
-        <label class="check">
-          <input type="checkbox" checked={showLocked} onChange={(event) => setShowLocked(event.currentTarget.checked)} />
-          <span>Show locked days</span>
-        </label>
+        <div class="admin-pager">
+          <button type="button" class="btn btn-small btn-ghost" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}>
+            Previous
+          </button>
+          <span>
+            {rangeStart && rangeEnd ? `${shortDay(rangeStart.day)} – ${shortDay(rangeEnd.day)}` : "None"}
+            <span class="admin-page-count"> {safePage + 1} / {pageCount}</span>
+          </span>
+          <button
+            type="button"
+            class="btn btn-small btn-ghost"
+            disabled={safePage >= pageCount - 1}
+            onClick={() => setPage(safePage + 1)}
+          >
+            Next
+          </button>
+        </div>
+        <button
+          type="button"
+          class="text-button"
+          onClick={() => {
+            setShowLocked((value) => !value);
+            setPage(0);
+          }}
+        >
+          {showLocked ? "Back to upcoming questions" : "Show locked days"}
+        </button>
+        {slice.length === 0 ? <p class="card-note">Nothing in this list.</p> : null}
         <ul class="admin-stack">
-          {visible.map((slot) => (
+          {slice.map((slot) => (
             <li key={slot.position}>
               <button
                 type="button"
-                class="text-button"
+                class={draft.position === slot.position ? "admin-slot admin-slot-on" : "admin-slot"}
                 disabled={slot.locked}
+                aria-current={draft.position === slot.position ? "true" : undefined}
                 onClick={() => {
                   setDraft(draftFrom(slot));
                   setError(null);
                 }}
               >
-                <span class={slot.locked ? "admin-day admin-day-locked" : "admin-day"}>{slot.day}</span>
-                {slot.puzzle.start} → {slot.puzzle.goal}
-                {slot.locked ? " · locked" : ""}
+                <span class="admin-day">{shortDay(slot.day)}</span>
+                <span class="admin-pair">
+                  {slot.puzzle.start} → {slot.puzzle.goal}
+                </span>
+                {slot.locked ? <span class="admin-lock">Locked</span> : null}
               </button>
             </li>
           ))}
         </ul>
         <h3 class="panel-sub">{draft.position === null ? "Add a question" : `Edit ${data.questions[draft.position]?.day ?? "that day"}`}</h3>
+        <p class="field-hint admin-id">
+          {shownId
+            ? draft.position === null
+              ? `Id ${shownId}, made from the two words.`
+              : `Id ${shownId}. It stays the same if you change the words.`
+            : "The id is created from the start and goal words."}
+        </p>
         <div class="admin-form">
-          <label class="field">Id<input class="field-input" value={draft.id} onInput={(event) => setDraft({ ...draft, id: event.currentTarget.value })} /></label>
-          <label class="field">Start<input class="field-input" value={draft.start} onInput={(event) => setDraft({ ...draft, start: event.currentTarget.value })} /></label>
-          <label class="field">Goal<input class="field-input" value={draft.goal} onInput={(event) => setDraft({ ...draft, goal: event.currentTarget.value })} /></label>
-          <label class="field">Lands on<input class="field-input" value={draft.here} onInput={(event) => setDraft({ ...draft, here: event.currentTarget.value })} /></label>
-          <label class="field">Similarity<input class="field-input" value={draft.similarity} onInput={(event) => setDraft({ ...draft, similarity: event.currentTarget.value })} /></label>
-          <label class="field">Accepted words<input class="field-input" value={draft.accepted} placeholder="word, word" onInput={(event) => setDraft({ ...draft, accepted: event.currentTarget.value })} /></label>
+          <Field label="Start" hint="The word the player begins on.">
+            <input class="field-input" value={draft.start} autoCapitalize="none" spellcheck={false} onInput={(event) => setDraft({ ...draft, start: event.currentTarget.value })} />
+          </Field>
+          <Field label="Goal" hint="The word they are trying to reach.">
+            <input class="field-input" value={draft.goal} autoCapitalize="none" spellcheck={false} onInput={(event) => setDraft({ ...draft, goal: event.currentTarget.value })} />
+          </Field>
+          <Field label="Lands on" hint="The vocabulary word the sample solution actually arrives at. Often the same as the goal.">
+            <input class="field-input" value={draft.here} autoCapitalize="none" spellcheck={false} onInput={(event) => setDraft({ ...draft, here: event.currentTarget.value })} />
+          </Field>
+          <Field label="Similarity" hint="How close that landing has to be, as a percent. 75% is the usual bar for a win.">
+            <input
+              class="field-input"
+              inputMode="decimal"
+              value={draft.similarity}
+              onInput={(event) => setDraft({ ...draft, similarity: event.currentTarget.value })}
+            />
+          </Field>
+          <Field label="Accepted words" hint="Two or three other words that also count as a win, separated by commas.">
+            <input
+              class="field-input"
+              value={draft.accepted}
+              placeholder="word, word"
+              autoCapitalize="none"
+              spellcheck={false}
+              onInput={(event) => setDraft({ ...draft, accepted: event.currentTarget.value })}
+            />
+          </Field>
         </div>
+        <p class="field-hint">Sample solution. Each step adds or subtracts one word. The number of steps is the par.</p>
         <ol class="admin-steps">
           {draft.steps.map((step, index) => (
             <li key={index}>
@@ -398,6 +456,71 @@ export function AdminPage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section class="card" aria-labelledby="admins-title">
+        <h2 class="card-title" id="admins-title">Admins</h2>
+        <p class="card-text">
+          {data.role === "super"
+            ? "Add the Google email of someone who should edit upcoming questions and their own account. The superadmin stays on the list."
+            : "These accounts can edit upcoming questions. Only the superadmin can change the list."}
+        </p>
+        <ul class="admin-people">
+          {data.admins.map((person) => (
+            <li key={person.email}>
+              <span>
+                {person.email}
+                {person.super ? " · superadmin" : person.addedBy ? ` · added by ${person.addedBy}` : ""}
+              </span>
+              {data.role === "super" && !person.super ? (
+                <button
+                  type="button"
+                  class="text-button text-danger"
+                  onClick={() => {
+                    setBusy(true);
+                    void adminApi.removeAdmin(person.email).then((reply) => {
+                      setBusy(false);
+                      if (reply.ok) apply(reply.value);
+                      else setError(reply.error);
+                    });
+                  }}
+                >
+                  Remove
+                </button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        {data.role === "super" ? (
+          <form
+            class="admin-add"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setBusy(true);
+              void adminApi.addAdmin(email).then((reply) => {
+                setBusy(false);
+                if (reply.ok) {
+                  setEmail("");
+                  apply(reply.value);
+                } else setError(reply.error);
+              });
+            }}
+          >
+            <Field label="Email" hint="They get access the next time they are signed in with this address.">
+              <input
+                class="field-input"
+                type="email"
+                value={email}
+                placeholder="name@example.com"
+                autoComplete="off"
+                onInput={(event) => setEmail(event.currentTarget.value)}
+              />
+            </Field>
+            <button type="submit" class="btn btn-small" disabled={busy || email.trim().length === 0}>
+              Add admin
+            </button>
+          </form>
+        ) : null}
       </section>
     </PageFrame>
   );
