@@ -21,6 +21,7 @@ import { WinDialog } from "./components/win-dialog.js";
 import type { WinReport } from "./components/win-dialog.js";
 import { pushWin, useAccount } from "./lib/account-store.js";
 import { joinBoard, loadBoard, submitName, submitScore } from "./lib/board-api.js";
+import { navigate } from "./lib/route.js";
 import { recentDays } from "./lib/standings.js";
 import type { BoardSnapshot } from "./lib/standings.js";
 import {
@@ -38,9 +39,9 @@ import {
 } from "./lib/game.js";
 import { closestWord, loadPack, nearestLabels, rowFor } from "./lib/pack.js";
 import type { Pack, PackProgress } from "./lib/pack.js";
-import { customPuzzle, mergePuzzles, puzzleForDay } from "./lib/puzzles.js";
+import { customPuzzle, mergePuzzles, parsePuzzleFile, puzzleAt } from "./lib/puzzles.js";
 import type { Puzzle } from "./lib/puzzles.js";
-import { COSMETICS, nextReward } from "./lib/rewards.js";
+import { nextReward } from "./lib/rewards.js";
 import type { CosmeticId } from "./lib/rewards.js";
 import {
   calendarDay,
@@ -58,7 +59,6 @@ import {
   streakAsOf,
   syncUnlocked,
   writeHowToSeen,
-  unlockAllLooks,
   writeLook,
 } from "./lib/storage.js";
 import type { SavedGame, ScoreEntry, StreakState } from "./lib/storage.js";
@@ -82,6 +82,22 @@ function loadPackOnce(onProgress: (progress: PackProgress) => void): Promise<Pac
     });
   }
   return packPromise;
+}
+
+/** The published schedule, then the built-in list if the schedule cannot be reached. */
+async function loadPublishedPuzzles(): Promise<Puzzle[]> {
+  try {
+    const response = await fetch("/api/schedule", { credentials: "same-origin" });
+    if (response.ok) {
+      const body = (await response.json()) as { puzzles?: unknown };
+      if (Array.isArray(body.puzzles) && body.puzzles.length > 0) return parsePuzzleFile(body.puzzles);
+    }
+  } catch {
+    // The built-in list below keeps the game playable.
+  }
+  const response = await fetch("/puzzles.json");
+  if (!response.ok) throw new Error(`Puzzle list failed (${response.status})`);
+  return mergePuzzles(await response.json());
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -176,16 +192,12 @@ export function App() {
         }
       });
 
-    fetch("/puzzles.json")
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`Puzzle list failed (${response.status})`);
-        return mergePuzzles(await response.json());
-      })
+    loadPublishedPuzzles()
       .then((list) => {
         if (cancel) return;
         const first = list[0];
         if (!first) throw new Error("Puzzle list is empty");
-        const pick = puzzleForDay(list, calendarDay(new Date())) ?? first;
+        const pick = puzzleAt(list, calendarDay(new Date())) ?? first;
         const saved = loadGame(pick.id);
         setPuzzles(list);
         setPuzzleId(pick.id);
@@ -299,7 +311,7 @@ export function App() {
     if (movesUsed < 1 || played.equationWords.length < 1) return;
     armedPuzzle.current = null;
     const todayKey = calendarDay(new Date());
-    const todayPuzzle = puzzles ? puzzleForDay(puzzles, todayKey) : null;
+    const todayPuzzle = puzzles ? puzzleAt(puzzles, todayKey) : null;
     const ranked = todayPuzzle != null && puzzle.id === todayPuzzle.id;
     const recorded = ranked
       ? recordWin({ puzzleId: puzzle.id, moves: movesUsed, day: todayKey })
@@ -407,7 +419,7 @@ export function App() {
   function playDay(day: string) {
     if (!puzzles) return;
     const todayKey = calendarDay(new Date());
-    const scheduled = puzzleForDay(puzzles, day);
+    const scheduled = puzzleAt(puzzles, day);
     if (!scheduled) return;
     setCustom(null);
     setArchiveDay(day === todayKey ? null : day);
@@ -467,7 +479,7 @@ export function App() {
     if (!puzzle || !played || !played.ok) return;
     const used = appliedSteps(moves);
     const today = calendarDay(new Date());
-    const todayPuzzle = puzzles ? puzzleForDay(puzzles, today) : null;
+    const todayPuzzle = puzzles ? puzzleAt(puzzles, today) : null;
     const practice = !todayPuzzle || todayPuzzle.id !== puzzle.id;
     const scored = played.scoredSteps.length;
     setShareDraft(
@@ -495,7 +507,7 @@ export function App() {
     if (!puzzles) return [];
     const days: BoardDay[] = [];
     for (const day of recentDays(todayKey)) {
-      const scheduled = puzzleForDay(puzzles, day);
+      const scheduled = puzzleAt(puzzles, day);
       if (scheduled) days.push({ day, puzzle: scheduled });
     }
     return days;
@@ -507,6 +519,7 @@ export function App() {
   }
 
   function layout(body: ComponentChildren) {
+    const staff = account.account?.role === "admin" || account.account?.role === "super";
     return (
       <div class="app">
         <TopBar
@@ -517,6 +530,8 @@ export function App() {
           onRewards={() => setRewardsOpen(true)}
           onBoard={() => setBoardOpen(true)}
           onHelp={() => setHowToOpen(true)}
+          onPractice={staff ? () => setAdminOpen(true) : undefined}
+          onAdmin={staff ? () => navigate("/admin") : undefined}
         />
         {body}
         <Admin
@@ -538,13 +553,6 @@ export function App() {
           onReveal={() => setRevealed(true)}
           onHide={() => setRevealed(false)}
           onPlay={playPair}
-          lockedLooks={COSMETICS.filter((item) => !rewards.unlocked.includes(item.id)).length}
-          onUnlockLooks={() => {
-            const unlocked = unlockAllLooks();
-            setRewards((before) => ({ ...before, unlocked }));
-            setAdminOpen(false);
-            setRewardsOpen(true);
-          }}
         />
         <RewardsDialog
           open={rewardsOpen}
@@ -557,10 +565,6 @@ export function App() {
           onEquip={(id) => {
             writeLook(id);
             setRewards((before) => ({ ...before, look: id }));
-          }}
-          onAdmin={() => {
-            setRewardsOpen(false);
-            setAdminOpen(true);
           }}
         />
         <HowToPlay open={howToOpen} onClose={closeHowTo} />

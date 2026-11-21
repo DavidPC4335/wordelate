@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
-import { AUTO_SYNC_MAX, MAX_SYNC_SCORES, mergeScores, scoreKey, streakFromDays } from "./account.js";
+import { AUTO_SYNC_MAX, MAX_SYNC_SCORES, mergeScores, scoreKey, statsFor, streakFromDays } from "./account.js";
 import type { AccountStats, AccountView } from "./account.js";
+import type { CosmeticId } from "./rewards.js";
 import { accountApi } from "./account-api.js";
 import {
   BEST_STREAK_KEY,
@@ -14,6 +15,10 @@ import {
   storageRemove,
   storageSet,
   syncUnlocked,
+  writeUnlockOverride,
+  UNLOCK_OVERRIDE_KEY,
+  UNLOCKED_KEY,
+  calendarDay,
 } from "./storage.js";
 import type { ScoreEntry } from "./storage.js";
 
@@ -120,7 +125,15 @@ export async function loadAccount(): Promise<void> {
   const reply = await accountApi.me();
   if (reply.ok) {
     const account = reply.value.account;
-    update({ status: "in", account, stats: account.stats });
+    let version = state.localVersion;
+    if (account.unlocks && account.unlocks.length > 0) {
+      const next = JSON.stringify(account.unlocks);
+      if (storageGet(UNLOCKED_KEY) !== next || storageGet(UNLOCK_OVERRIDE_KEY) !== "1") {
+        writeUnlockOverride(account.unlocks);
+        version += 1;
+      }
+    }
+    update({ status: "in", account, stats: account.stats, localVersion: version });
     if (isLinked(account) || account.stats.wins === 0) {
       // Already linked, or a brand new account: nothing to decide. Save quietly.
       void syncAccount();
@@ -242,4 +255,27 @@ export async function updateProfile(change: { username?: string; showPicture?: b
   }
   update({ account: reply.value.account });
   return null;
+}
+
+/** An admin replaced their account scores. This browser keeps the same list. */
+export function adoptAccountScores(entries: readonly ScoreEntry[]): void {
+  storageSet(SCORES_KEY, JSON.stringify(entries));
+  const run = streakFromDays(entries.map((entry) => entry.day));
+  storageSet(STREAK_KEY, JSON.stringify({ count: run.count, lastDay: run.lastDay }));
+  storageSet(BEST_STREAK_KEY, String(run.best));
+  const stats = statsFor(entries, calendarDay(new Date()));
+  update({
+    stats,
+    account: state.account ? { ...state.account, stats } : state.account,
+    localVersion: state.localVersion + 1,
+  });
+}
+
+/** An admin set the looks on their account. */
+export function adoptUnlocks(ids: readonly CosmeticId[]): void {
+  writeUnlockOverride(ids);
+  update({
+    account: state.account ? { ...state.account, unlocks: [...ids] } : state.account,
+    localVersion: state.localVersion + 1,
+  });
 }

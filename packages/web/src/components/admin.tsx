@@ -1,7 +1,7 @@
 import { useMemo, useState } from "preact/hooks";
 import { countsAsWin, formatEquation, formatPercent } from "../lib/game.js";
 import type { Puzzle } from "../lib/puzzles.js";
-import { ArrowIcon, CheckIcon, GearIcon, LockIcon, SearchIcon } from "./icons.js";
+import { ArrowIcon, CheckIcon, GearIcon, SearchIcon } from "./icons.js";
 import { Modal } from "./modal.js";
 
 export function Admin({
@@ -16,8 +16,6 @@ export function Admin({
   onReveal,
   onHide,
   onPlay,
-  lockedLooks,
-  onUnlockLooks,
 }: {
   open: boolean;
   onClose: () => void;
@@ -31,9 +29,6 @@ export function Admin({
   onHide: () => void;
   /** Returns an error message, or null when the pair starts. */
   onPlay: (start: string, goal: string) => string | null;
-  /** How many graph looks are still locked. */
-  lockedLooks: number;
-  onUnlockLooks: () => void;
 }) {
   const [start, setStart] = useState("");
   const [goal, setGoal] = useState("");
@@ -64,7 +59,7 @@ export function Admin({
           <GearIcon size={26} />
           Admin
         </h2>
-        <p class="panel-note">Tools for testing. Progress here is saved in this browser only.</p>
+        <p class="panel-note">Practice tools. Scores and looks for your account are changed on the admin page.</p>
 
         <section class="admin-section" aria-labelledby="admin-custom">
           <h3 class="panel-sub" id="admin-custom">
@@ -136,23 +131,6 @@ export function Admin({
               aria-pressed={revealed}
             >
               {revealed ? "Hide solution" : "Reveal solution"}
-            </button>
-          </div>
-        </section>
-
-        <section class="admin-section" aria-labelledby="admin-looks">
-          <h3 class="panel-sub" id="admin-looks">
-            Graph looks
-          </h3>
-          <p class="panel-note">
-            {lockedLooks === 0
-              ? "Every look is unlocked. Pick one in your rewards."
-              : `${lockedLooks} ${lockedLooks === 1 ? "look is" : "looks are"} still locked. Unlock them all to preview them.`}
-          </p>
-          <div class="admin-actions">
-            <button type="button" class="btn btn-small" onClick={onUnlockLooks} disabled={lockedLooks === 0}>
-              <LockIcon size={16} />
-              Unlock all looks
             </button>
           </div>
         </section>

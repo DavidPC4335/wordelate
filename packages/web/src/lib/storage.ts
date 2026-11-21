@@ -305,6 +305,8 @@ export function readStreak(): StreakState {
 
 export const BEST_STREAK_KEY = "wordelate.bestStreak";
 export const UNLOCKED_KEY = "wordelate.unlocked";
+/** Set when an admin has chosen this account's looks, so earning more points does not add more. */
+export const UNLOCK_OVERRIDE_KEY = "wordelate.unlockOverride";
 export const LOOK_KEY = "wordelate.look";
 export const HOWTO_SEEN_KEY = "wordelate.howtoSeen";
 export const LAST_PUZZLE_KEY = "wordelate.lastPuzzle";
@@ -362,7 +364,23 @@ export function readUnlocked(): CosmeticId[] {
  * Save every look the stats have earned, on top of what was saved before.
  * `fresh` is only what this call added, so the caller can celebrate it once.
  */
+/** Save the exact list of looks an admin set for this account. */
+export function writeUnlockOverride(ids: readonly CosmeticId[]): void {
+  const unique = [...new Set(ids)];
+  if (!unique.includes(DEFAULT_COSMETIC)) unique.unshift(DEFAULT_COSMETIC);
+  storageSet(UNLOCKED_KEY, JSON.stringify(unique));
+  storageSet(UNLOCK_OVERRIDE_KEY, "1");
+}
+
 export function syncUnlocked(stats: RewardStats): { unlocked: CosmeticId[]; fresh: CosmeticId[] } {
+  if (storageGet(UNLOCK_OVERRIDE_KEY) === "1") {
+    const unlocked = readUnlocked();
+    if (!unlocked.includes(DEFAULT_COSMETIC)) {
+      unlocked.unshift(DEFAULT_COSMETIC);
+      storageSet(UNLOCKED_KEY, JSON.stringify(unlocked));
+    }
+    return { unlocked, fresh: [] };
+  }
   const saved = new Set(readUnlocked());
   const fresh: CosmeticId[] = [];
   for (const id of earnedIds(stats)) {

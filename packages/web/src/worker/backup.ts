@@ -43,6 +43,24 @@ const TABLES: {
     after: "SELECT * FROM friendships WHERE (user_a, user_b) > (?, ?) ORDER BY user_a, user_b LIMIT ?",
     cursor: ["user_a", "user_b"],
   },
+  {
+    name: "admins",
+    first: "SELECT * FROM admins ORDER BY email LIMIT ?",
+    after: "SELECT * FROM admins WHERE email > ? ORDER BY email LIMIT ?",
+    cursor: ["email"],
+  },
+  {
+    name: "questions",
+    first: "SELECT * FROM questions ORDER BY position LIMIT ?",
+    after: "SELECT * FROM questions WHERE position > ? ORDER BY position LIMIT ?",
+    cursor: ["position"],
+  },
+  {
+    name: "admin_audit",
+    first: "SELECT * FROM admin_audit ORDER BY id LIMIT ?",
+    after: "SELECT * FROM admin_audit WHERE id > ? ORDER BY id LIMIT ?",
+    cursor: ["id"],
+  },
 ];
 
 async function page(sql: Sql, table: (typeof TABLES)[number], cursor: unknown[] | null): Promise<Page> {

@@ -1,4 +1,6 @@
 import type { AccountView, FriendView, SyncResult } from "./account.js";
+import type { AdminOverview } from "./admin.js";
+import type { Puzzle } from "./puzzles.js";
 
 export type Reply<T> = { ok: true; value: T } | { ok: false; status: number; error: string };
 
@@ -43,6 +45,14 @@ export const accountApi = {
   preview: (token: string) => call<{ name: string; picture: string | null; self: boolean; friends: boolean }>("/api/friends/preview", { token }),
   accept: (token: string) => call<{ ok: true; name: string }>("/api/friends/accept", { token }),
   unfriend: (id: string) => call<{ ok: true }>("/api/friends/remove", { id }),
+};
+
+export const adminApi = {
+  load: () => call<AdminOverview>("/api/admin"),
+  addAdmin: (email: string) => call<AdminOverview>("/api/admin/admins", { email }),
+  removeAdmin: (email: string) => call<AdminOverview>("/api/admin/admins/remove", { email }),
+  saveQuestion: (position: number | null, puzzle: Puzzle) => call<AdminOverview>("/api/admin/questions", { position, puzzle }),
+  saveAccount: (body: { scores?: readonly unknown[]; unlocks?: readonly string[] }) => call<AdminOverview>("/api/admin/account", body),
 };
 
 /** Where the Google sign-in starts. `next` is one of the few pages the server will return to. */

@@ -10,7 +10,7 @@ import type { BoardDeps, BoardLimits } from "../src/worker/handle.js";
 import type { Sql } from "../src/worker/sql.js";
 
 const SECRET = "test-secret-test-secret-test-secret";
-const SCHEMA = ["0001_board.sql", "0002_accounts.sql", "0003_profile.sql"]
+const SCHEMA = ["0001_board.sql", "0002_accounts.sql", "0003_profile.sql", "0004_admin.sql"]
   .map((file) => readFileSync(new URL(`../migrations/${file}`, import.meta.url), "utf8"))
   .join("\n");
 const NOW = Date.parse("2026-11-20T15:00:00.000Z");

@@ -124,6 +124,16 @@ export function puzzleForDay(puzzles: readonly Puzzle[], day: string): Puzzle | 
   return puzzles[index] ?? null;
 }
 
+/**
+ * The puzzle at that calendar day, with no wrap. A day before the schedule, or past
+ * the end of the list, has no puzzle. This is the schedule the admin stack uses.
+ */
+export function puzzleAt(puzzles: readonly Puzzle[], day: string): Puzzle | null {
+  const delta = daysBetween(SCHEDULE_EPOCH, day);
+  if (delta == null || delta < 0 || delta >= puzzles.length) return null;
+  return puzzles[delta] ?? null;
+}
+
 /** Daily puzzles plus the extra complex set. Accepted words stay on each row. */
 export function mergePuzzles(main: unknown): Puzzle[] {
   if (!Array.isArray(main) || !Array.isArray(morePuzzles)) {

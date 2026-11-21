@@ -16,6 +16,7 @@ const people = {
   ada: { sub: "mock-ada", name: "Ada Lovelace", given_name: "Ada", email: "ada@example.com", picture: "https://lh3.googleusercontent.com/a/mock-ada" },
   bob: { sub: "mock-bob", name: "Bob Barker", given_name: "Bob", email: "bob@example.com" },
   cy: { sub: "mock-cy", name: "Cy Young", given_name: "Cy", email: "cy@example.com" },
+  dave: { sub: "mock-dave", name: "David", given_name: "David", email: "daviddev4335@gmail.com" },
 };
 
 const grants = new Map();

@@ -1,10 +1,14 @@
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import dailyPuzzles from "../public/puzzles.json" with { type: "json" };
 import { MAX_FRIENDS, MAX_SYNC_SCORES } from "../src/lib/account.js";
 import { scoreForMoves } from "../src/lib/storage.js";
 import type { ScoreEntry } from "../src/lib/storage.js";
+import { mergePuzzles } from "../src/lib/puzzles.js";
+import { handleAdmin, handleSchedule } from "../src/worker/admin.js";
 import { handleAccount } from "../src/worker/account.js";
+import { resetScheduleCache } from "../src/worker/schedule.js";
 import type { AccountDeps } from "../src/worker/account.js";
 import { accountFromRequest } from "../src/worker/account.js";
 import { backupAccounts, backupKey } from "../src/worker/backup.js";
@@ -18,7 +22,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const CLIENT_ID = "client-123.apps.googleusercontent.com";
 const HOME = "http://127.0.0.1";
 
-const SCHEMA = ["0001_board.sql", "0002_accounts.sql", "0003_profile.sql"]
+const SCHEMA = ["0001_board.sql", "0002_accounts.sql", "0003_profile.sql", "0004_admin.sql"]
   .map((file) => readFileSync(new URL(`../migrations/${file}`, import.meta.url), "utf8"))
   .join("\n");
 
@@ -893,8 +897,11 @@ describe("weekly backup", () => {
     const result = await backupAccounts(h.sql, store, "2026-11-22", NOW);
     expect(result).toMatchObject({ users: 2, scores: 1, friendships: 1 });
     expect([...store.objects.keys()].sort()).toEqual([
+      backupKey("2026-11-22", "admin_audit", 1),
+      backupKey("2026-11-22", "admins", 1),
       backupKey("2026-11-22", "friendships", 1),
       backupKey("2026-11-22", "manifest"),
+      backupKey("2026-11-22", "questions", 1),
       backupKey("2026-11-22", "scores", 1),
       backupKey("2026-11-22", "users", 1),
     ]);
@@ -967,5 +974,120 @@ describe("weekly backup", () => {
     await backupAccounts(h.sql, archive(), "2026-11-22", h.clock.now);
     expect(h.db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toMatchObject({ n: 0 });
     expect(ada.cookie).toBeTruthy();
+  });
+});
+
+const seed = mergePuzzles(dailyPuzzles);
+
+describe("admins", () => {
+  beforeEach(() => resetScheduleCache());
+
+  function getAdmin(h: Harness, cookie = "") {
+    return handleAdmin(
+      new Request(`${HOME}/api/admin`, { headers: { cookie, "cf-connecting-ip": "203.0.113.9" } }),
+      h.deps,
+      seed,
+    );
+  }
+
+  function postAdmin(h: Harness, path: string, body: unknown, cookie: string) {
+    return handleAdmin(
+      new Request(`${HOME}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie, "cf-connecting-ip": "203.0.113.9" },
+        body: JSON.stringify(body),
+      }),
+      h.deps,
+      seed,
+    );
+  }
+
+  it("hides the admin API from everyone else and seeds the question stack", async () => {
+    const h = harness();
+    expect((await getAdmin(h)).status).toBe(401);
+    const ada = await login(h, { sub: "ada", email: "ada@example.com" });
+    expect((await getAdmin(h, ada.cookie)).status).toBe(404);
+    expect((await postAdmin(h, "/api/admin/questions", {}, ada.cookie)).status).toBe(404);
+
+    const boss = await login(h, { sub: "boss", email: "DavidDev4335@gmail.com" });
+    const overview = await (await getAdmin(h, boss.cookie)).json();
+    expect(overview.role).toBe("super");
+    expect(overview.questions).toHaveLength(seed.length);
+    expect(overview.questions[0]).toMatchObject({ day: "2026-11-20", locked: true });
+    expect(overview.questions[1].locked).toBe(false);
+    expect(overview.admins.map((person: { email: string }) => person.email)).toContain("daviddev4335@gmail.com");
+
+    const published = await (await handleSchedule(h.deps, seed)).json();
+    expect(published.puzzles).toHaveLength(1);
+    expect(published.puzzles[0].id).toBe(seed[0]?.id);
+    expect(JSON.stringify(published)).not.toContain(seed[1]?.id ?? "missing");
+  });
+
+  it("refuses today's question, allows a later one, and records the change", async () => {
+    const h = harness();
+    const boss = await login(h, { sub: "boss", email: "daviddev4335@gmail.com" });
+    const today = seed[0];
+    expect(today).toBeTruthy();
+    expect((await postAdmin(h, "/api/admin/questions", { position: 0, puzzle: today }, boss.cookie)).status).toBe(409);
+
+    const next = { ...seed[1], solutionSimilarity: 0.42 };
+    const saved = await postAdmin(h, "/api/admin/questions", { position: 1, puzzle: next }, boss.cookie);
+    expect(saved.status).toBe(200);
+    const body = await saved.json();
+    expect(body.questions[1].puzzle.solutionSimilarity).toBe(0.42);
+    expect(body.audit[0]).toMatchObject({ action: "question.update", detail: expect.stringContaining(next?.id) });
+
+    const added = { ...seed[2], id: "extra-pair" };
+    const appended = await postAdmin(h, "/api/admin/questions", { position: null, puzzle: added }, boss.cookie);
+    expect(appended.status).toBe(200);
+    const after = await appended.json();
+    expect(after.questions).toHaveLength(seed.length + 1);
+    expect(after.questions.at(-1)).toMatchObject({ locked: false, puzzle: { id: "extra-pair" } });
+  });
+
+  it("lets only the superadmin edit the admin list", async () => {
+    const h = harness();
+    const boss = await login(h, { sub: "boss", email: "daviddev4335@gmail.com" });
+    const ada = await login(h, { sub: "ada", email: "ada@example.com" });
+    expect((await postAdmin(h, "/api/admin/admins", { email: "ada@example.com" }, ada.cookie)).status).toBe(404);
+
+    expect((await postAdmin(h, "/api/admin/admins", { email: "not an email" }, boss.cookie)).status).toBe(400);
+    expect((await postAdmin(h, "/api/admin/admins", { email: "daviddev4335@gmail.com" }, boss.cookie)).status).toBe(409);
+    const added = await postAdmin(h, "/api/admin/admins", { email: "Ada@Example.com" }, boss.cookie);
+    expect(added.status).toBe(200);
+    expect((await added.json()).audit[0]).toMatchObject({ action: "admin.add", detail: "ada@example.com" });
+
+    const asAda = await (await getAdmin(h, ada.cookie)).json();
+    expect(asAda.role).toBe("admin");
+    expect((await postAdmin(h, "/api/admin/admins", { email: "cy@example.com" }, ada.cookie)).status).toBe(404);
+    expect((await postAdmin(h, "/api/admin/admins/remove", { email: "daviddev4335@gmail.com" }, boss.cookie)).status).toBe(403);
+
+    const removed = await postAdmin(h, "/api/admin/admins/remove", { email: "ada@example.com" }, boss.cookie);
+    expect(removed.status).toBe(200);
+    expect((await getAdmin(h, ada.cookie)).status).toBe(404);
+    expect((await removed.json()).audit.map((entry: { action: string }) => entry.action)).toContain("admin.remove");
+  });
+
+  it("replaces the admin's own scores and looks on the account", async () => {
+    const h = harness();
+    const boss = await login(h, { sub: "boss", email: "daviddev4335@gmail.com" });
+    await post(h, "/api/account/sync", { scores: [entry("2026-11-20", "old-puzzle", 2)] }, boss.cookie);
+    const saved = await postAdmin(
+      h,
+      "/api/admin/account",
+      { scores: [entry("2026-11-19", "mother-son", 4)], unlocks: ["classic", "sunset"] },
+      boss.cookie,
+    );
+    expect(saved.status).toBe(200);
+    const body = await saved.json();
+    expect(body.scores).toEqual([entry("2026-11-19", "mother-son", 4)]);
+    expect(body.unlocks).toEqual(["classic", "sunset"]);
+    const me = await (await get(h, "/api/account/me", boss.cookie)).json();
+    expect(me.account.role).toBe("super");
+    expect(me.account.unlocks).toEqual(["classic", "sunset"]);
+    expect(me.account.stats.totalPoints).toBe(entry("2026-11-19", "mother-son", 4).score);
+    expect(me.account.stats.wins).toBe(1);
+    expect((await postAdmin(h, "/api/admin/account", { unlocks: ["nope"] }, boss.cookie)).status).toBe(400);
+    expect((await postAdmin(h, "/api/admin/account", { scores: [{ day: "2026-11-19", puzzleId: "x", moves: 4, score: 1 }] }, boss.cookie)).status).toBe(400);
   });
 });

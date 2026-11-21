@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { App } from "./app.js";
 import { AccountPage } from "./components/account-page.js";
+import { AdminPage } from "./components/admin-page.js";
 import { FriendPage } from "./components/friend-page.js";
 import { PrivacyPage } from "./components/privacy-page.js";
 import { loadAccount } from "./lib/account-store.js";
@@ -40,6 +41,8 @@ export function Root() {
     <>
       {route.name === "account" ? (
         <AccountPage />
+      ) : route.name === "admin" ? (
+        <AdminPage />
       ) : route.name === "privacy" ? (
         <PrivacyPage />
       ) : route.name === "friend" ? (

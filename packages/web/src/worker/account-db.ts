@@ -1,4 +1,8 @@
 import { statsFor, streakFromDays } from "../lib/account.js";
+import { SUPERADMIN_EMAIL } from "../lib/admin.js";
+import type { AdminRole } from "../lib/admin.js";
+import { isCosmeticId } from "../lib/rewards.js";
+import type { CosmeticId } from "../lib/rewards.js";
 import { daysBetween } from "../lib/standings.js";
 import type { ScoreEntry } from "../lib/storage.js";
 import { forgetUser } from "./board-db.js";
@@ -21,6 +25,8 @@ export type UserRow = {
   streak: number;
   streakDay: string | null;
   bestStreak: number;
+  /** An exact list of looks, when an admin has set one. Null means looks are earned. */
+  unlocks: CosmeticId[] | null;
   createdAt: number;
   lastLoginAt: number;
 };
@@ -40,12 +46,24 @@ type UserRecord = {
   streak: number;
   streak_day: string | null;
   best_streak: number;
+  unlocks_json: string | null;
   created_at: number;
   last_login_at: number;
 };
 
 const USER_COLUMNS =
-  "id, google_sub, email, full_name, display_name, picture, username_set, show_picture, invite_gen, total_points, wins, streak, streak_day, best_streak, created_at, last_login_at";
+  "id, google_sub, email, full_name, display_name, picture, username_set, show_picture, invite_gen, total_points, wins, streak, streak_day, best_streak, unlocks_json, created_at, last_login_at";
+
+function unlocksFrom(value: string | null): CosmeticId[] | null {
+  if (!value) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter(isCosmeticId);
+  } catch {
+    return null;
+  }
+}
 
 function userFrom(record: UserRecord): UserRow {
   return {
@@ -63,9 +81,17 @@ function userFrom(record: UserRecord): UserRow {
     streak: Number(record.streak),
     streakDay: record.streak_day,
     bestStreak: Number(record.best_streak),
+    unlocks: unlocksFrom(record.unlocks_json),
     createdAt: Number(record.created_at),
     lastLoginAt: Number(record.last_login_at),
   };
+}
+
+export async function adminRole(sql: Sql, email: string): Promise<AdminRole> {
+  const normalized = email.trim().toLowerCase();
+  if (normalized === SUPERADMIN_EMAIL) return "super";
+  const row = await sql.get<{ email: string }>(`SELECT email FROM admins WHERE email = ?`, [normalized]);
+  return row ? "admin" : "player";
 }
 
 export async function getUser(sql: Sql, id: string): Promise<UserRow | null> {
@@ -189,6 +215,16 @@ export async function saveScores(
       params,
     );
   }
+}
+
+/** Replace every score on an account. Used by an admin editing their own account. */
+export async function replaceScores(sql: Sql, userId: string, entries: readonly ScoreEntry[], now: number): Promise<void> {
+  await sql.run(`DELETE FROM account_scores WHERE user_id = ?`, [userId]);
+  await saveScores(sql, userId, entries, now);
+}
+
+export async function setUnlocks(sql: Sql, userId: string, unlocks: readonly CosmeticId[]): Promise<void> {
+  await sql.run(`UPDATE users SET unlocks_json = ? WHERE id = ?`, [JSON.stringify(unlocks), userId]);
 }
 
 export async function scoreCount(sql: Sql, userId: string): Promise<number> {

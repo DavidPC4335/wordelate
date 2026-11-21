@@ -1,12 +1,13 @@
 import { useEffect, useState } from "preact/hooks";
 
-export type Route = { name: "game" } | { name: "account" } | { name: "privacy" } | { name: "friend"; token: string };
+export type Route = { name: "game" } | { name: "account" } | { name: "privacy" } | { name: "admin" } | { name: "friend"; token: string };
 
 const FRIEND_PATH = /^\/friend\/([0-9a-f-]{36}\.[A-Za-z0-9_-]{22})$/;
 
 export function parseRoute(pathname: string): Route {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
   if (path === "/account") return { name: "account" };
+  if (path === "/admin") return { name: "admin" };
   if (path === "/privacy-policy") return { name: "privacy" };
   const friend = FRIEND_PATH.exec(path);
   if (friend?.[1]) return { name: "friend", token: friend[1] };

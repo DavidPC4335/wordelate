@@ -161,6 +161,22 @@ button:focus-visible, input:focus-visible, summary:focus-visible, .dot:focus-vis
 .icon-btn:active { transform: scale(0.92); }
 .icon-btn[aria-expanded="true"] { background: var(--primary); border-color: var(--primary); color: #fff; }
 
+.admin-link {
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  border: 2px solid var(--primary);
+  border-radius: 999px;
+  background: var(--primary-tint);
+  color: var(--primary-deep);
+  font-family: var(--display);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-link:hover { filter: brightness(1.04); }
+.admin-link:active { transform: scale(0.96); }
+
 .pill {
   display: inline-flex;
   align-items: center;
@@ -1366,6 +1382,7 @@ button:focus-visible, input:focus-visible, summary:focus-visible, .dot:focus-vis
   .q-word { max-width: 42vw; }
   .pill { height: 2.2rem; padding: 0 0.6rem 0 0.5rem; font-size: 0.95rem; }
   .icon-btn { width: 2.2rem; height: 2.2rem; }
+  .admin-link { height: 2.2rem; padding: 0 0.6rem; font-size: 0.85rem; }
   .modal-body > :not(.modal-close) { padding: 1.2rem 1rem 1.2rem; }
   .looks { grid-template-columns: 1fr 1fr; gap: 0.6rem; }
   .look-info { padding: 0.55rem 0.6rem 0.7rem; }
@@ -1400,7 +1417,7 @@ button:focus-visible, input:focus-visible, summary:focus-visible, .dot:focus-vis
   .topbar { padding-block: 0.3rem; }
   .brand-logo { height: 1.8rem; }
   .question { font-size: 1.1rem; }
-  .pill, .icon-btn { height: 2.1rem; }
+  .pill, .icon-btn, .admin-link { height: 2.1rem; }
   .icon-btn { width: 2.1rem; }
   .dock-inner { padding: 0.6rem; gap: 0.5rem; }
   .stage-hint { display: none; }
@@ -1587,6 +1604,15 @@ button:focus-visible, input:focus-visible, summary:focus-visible, .dot:focus-vis
 .check { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.88rem; font-weight: 700; cursor: pointer; }
 .check input { width: 1.15rem; height: 1.15rem; flex: none; accent-color: var(--primary-deep); cursor: pointer; }
 .board-cheer .picture-toggle { justify-items: center; color: var(--ink); }
+.admin-people, .admin-stack, .admin-scores, .admin-audit, .admin-looks, .admin-steps { display: grid; gap: 0.35rem; }
+.admin-people li, .admin-scores li, .admin-steps li { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.admin-stack, .admin-scores { max-height: 18rem; overflow: auto; padding-right: 0.2rem; }
+.admin-day { font-variant-numeric: tabular-nums; color: var(--ink-soft); margin-right: 0.4rem; }
+.admin-day-locked { color: var(--ink-soft); }
+.admin-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.6rem; }
+.admin-steps select, .admin-form .field-input, .admin-steps .field-input { min-width: 0; }
+.admin-audit li { display: grid; gap: 0.1rem; color: var(--ink-soft); font-size: 0.88rem; font-weight: 700; }
+.admin-looks { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
 .profile-edit { display: grid; gap: 0.4rem; }
 .profile-change { justify-self: start; margin-top: 0.15rem; }
 

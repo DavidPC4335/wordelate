@@ -1,4 +1,5 @@
 /** Account rules shared by the Worker and the page. */
+import type { CosmeticId } from "./rewards.js";
 import { daysBetween, isDayKey, shiftDay } from "./standings.js";
 import { scoreForMoves } from "./storage.js";
 import type { ScoreEntry } from "./storage.js";
@@ -40,6 +41,10 @@ export type AccountView = {
   stats: AccountStats;
   /** The private link that lets a friend add you. */
   invitePath: string;
+  /** Server-checked. The page uses this only to show an admin link. */
+  role: "player" | "admin" | "super";
+  /** Set when an admin has chosen this account's looks. Null means they are earned. */
+  unlocks: CosmeticId[] | null;
 };
 
 export type FriendDay = { day: string; score: number; moves: number };

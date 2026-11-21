@@ -2,9 +2,11 @@ import dailyPuzzles from "../../public/puzzles.json" with { type: "json" };
 import { retentionStart } from "../lib/standings.js";
 import { decodePack } from "../lib/pack.js";
 import type { Pack } from "../lib/pack.js";
-import { mergePuzzles, puzzleForDay } from "../lib/puzzles.js";
+import { mergePuzzles, puzzleAt } from "../lib/puzzles.js";
 import { calendarDay } from "../lib/storage.js";
+import { handleAdmin, handleSchedule } from "./admin.js";
 import { accountFromRequest, handleAccount, isAccountPath } from "./account.js";
+import { ensureSchedule } from "./schedule.js";
 import { archiveExpiredDays } from "./archive.js";
 import { backupAccounts } from "./backup.js";
 import { GOOGLE_ENDPOINTS } from "./google.js";
@@ -85,23 +87,42 @@ export default {
         fetcher: (input, init) => fetch(input, init),
       });
     }
+    const now = Date.now();
+    const sql = d1sql(env.DB);
+    const accountDeps = {
+      sql,
+      secret: env.ACCOUNT_SECRET ?? "",
+      now: () => now,
+      google: googleConfig(env),
+      fetcher: (input: string, init?: RequestInit) => fetch(input, init),
+    };
+    if (url.pathname === "/api/schedule" && request.method === "GET") return handleSchedule(accountDeps, scheduled);
+    if (url.pathname === "/api/admin" || url.pathname.startsWith("/api/admin/")) return handleAdmin(request, accountDeps, scheduled);
     let pack: Pack | null = null;
+    let dailyPuzzleId = puzzleAt(scheduled, calendarDay(new Date(now)))?.id ?? "";
+    let puzzleLookup = (id: string) => catalog.get(id) ?? null;
     if (url.pathname === "/api/score") {
       try {
         pack = await loadPack(env.ASSETS, request.url);
       } catch (error) {
         console.error(JSON.stringify({ event: "pack", message: error instanceof Error ? error.message : "failed" }));
       }
+      try {
+        const stack = await ensureSchedule(sql, scheduled, now);
+        const byId = new Map(stack.map((puzzle) => [puzzle.id, puzzle]));
+        puzzleLookup = (id) => byId.get(id) ?? null;
+        dailyPuzzleId = puzzleAt(stack, calendarDay(new Date(now)))?.id ?? "";
+      } catch (error) {
+        console.error(JSON.stringify({ event: "schedule", message: error instanceof Error ? error.message : "failed" }));
+      }
     }
-    const now = Date.now();
-    const sql = d1sql(env.DB);
     return handleBoard(request, {
       sql,
       secret: env.LEADERBOARD_SECRET,
       now: () => now,
       pack,
-      puzzle: (id) => catalog.get(id) ?? null,
-      dailyPuzzleId: puzzleForDay(scheduled, calendarDay(new Date(now)))?.id ?? "",
+      puzzle: puzzleLookup,
+      dailyPuzzleId,
       account: async (incoming) => {
         const user = await accountFromRequest(incoming, sql, now);
         return user ? { id: user.id, name: user.displayName, picture: user.showPicture ? user.picture : null } : null;

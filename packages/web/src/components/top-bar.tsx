@@ -1,5 +1,5 @@
 import { AccountButton } from "./account-popover.js";
-import { ArrowIcon, BoardIcon, FlameIcon, HelpIcon, StarIcon } from "./icons.js";
+import { ArrowIcon, BoardIcon, FlameIcon, GearIcon, HelpIcon, StarIcon } from "./icons.js";
 
 /** The question. Always in the header so the player never loses track of the goal. */
 function Question({ start, goal }: { start: string; goal: string }) {
@@ -20,6 +20,8 @@ export function TopBar({
   onRewards,
   onBoard,
   onHelp,
+  onPractice,
+  onAdmin,
 }: {
   start: string | null;
   goal: string | null;
@@ -28,6 +30,10 @@ export function TopBar({
   onRewards: () => void;
   onBoard: () => void;
   onHelp: () => void;
+  /** Present only for an account the server says is an admin. */
+  onPractice?: () => void;
+  /** Present only for an account the server says is an admin. Opens the admin page. */
+  onAdmin?: () => void;
 }) {
   return (
     <header class="topbar">
@@ -60,6 +66,16 @@ export function TopBar({
         <button type="button" class="icon-btn" onClick={onHelp} aria-label="How to play" title="How to play">
           <HelpIcon size={20} />
         </button>
+        {onPractice ? (
+          <button type="button" class="icon-btn" onClick={onPractice} aria-label="Practice tools" title="Practice tools">
+            <GearIcon size={20} />
+          </button>
+        ) : null}
+        {onAdmin ? (
+          <button type="button" class="admin-link" onClick={onAdmin}>
+            Admin
+          </button>
+        ) : null}
         <AccountButton />
       </div>
     </header>

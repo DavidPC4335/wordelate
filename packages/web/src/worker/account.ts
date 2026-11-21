@@ -23,6 +23,7 @@ import {
   extendSession,
   friendCount,
   friendsOf,
+  adminRole,
   getSession,
   getUser,
   liveStreak,
@@ -94,7 +95,7 @@ export type AccountDeps = {
 };
 
 /** Where a person lands after signing in. Only these shapes, so the redirect cannot leave the site. */
-const NEXT_PATH = /^\/(?:account|friend\/[0-9a-f-]{36}\.[A-Za-z0-9_-]{22})?$/;
+const NEXT_PATH = /^\/(?:account|admin|friend\/[0-9a-f-]{36}\.[A-Za-z0-9_-]{22})?$/;
 
 function safeNext(raw: string | null): string {
   return raw !== null && NEXT_PATH.test(raw) ? raw : "/";
@@ -230,11 +231,13 @@ function statsOf(user: UserRow, today: string): AccountStats {
   };
 }
 
-async function viewOf(user: UserRow, secret: string, today: string): Promise<AccountView> {
+async function viewOf(user: UserRow, secret: string, today: string, sql: Sql): Promise<AccountView> {
   return {
     profile: { id: user.id, username: user.displayName, name: user.fullName || user.displayName, showPicture: user.showPicture, email: user.email, picture: user.picture, memberSince: user.createdAt },
     stats: statsOf(user, today),
     invitePath: `/friend/${await inviteToken(secret, user)}`,
+    role: await adminRole(sql, user.email),
+    unlocks: user.unlocks,
   };
 }
 
@@ -281,7 +284,7 @@ export async function handleAccount(request: Request, deps: AccountDeps): Promis
   const user = auth.user;
 
   if (path === "/api/account/me" && request.method === "GET") {
-    return reply({ account: await viewOf(user, deps.secret, today) }, 200, request, auth);
+    return reply({ account: await viewOf(user, deps.secret, today, deps.sql) }, 200, request, auth);
   }
 
   if (path === "/api/account/sync" && request.method === "POST") {
@@ -338,7 +341,7 @@ export async function handleAccount(request: Request, deps: AccountDeps): Promis
     if (change.showPicture !== undefined) await setPictureFor(deps.sql, user.id, change.showPicture ? user.picture : null);
     const fresh = await getUser(deps.sql, user.id);
     if (!fresh) return fail(404, "Not found.");
-    return reply({ account: await viewOf(fresh, deps.secret, today) }, 200, request, auth);
+    return reply({ account: await viewOf(fresh, deps.secret, today, deps.sql) }, 200, request, auth);
   }
 
   if (path === "/api/account/invite/reset" && request.method === "POST") {

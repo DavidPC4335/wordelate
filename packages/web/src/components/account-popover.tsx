@@ -98,6 +98,18 @@ export function AccountButton() {
               </div>
               <SyncControl />
               <div class="pop-actions">
+                {account.account?.role === "admin" || account.account?.role === "super" ? (
+                  <button
+                    type="button"
+                    class="btn btn-small"
+                    onClick={() => {
+                      setOpen(false);
+                      navigate("/admin");
+                    }}
+                  >
+                    Admin
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   class="btn btn-small btn-ghost"

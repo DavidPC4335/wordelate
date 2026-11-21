@@ -35,8 +35,10 @@ export function PrivacyPage() {
               account ID, name, email address, and the web address of your profile picture. We keep that address only. We never download or store the picture itself.
             </li>
             <li>
-              <strong>Game data.</strong> Your scores, moves, points, streaks, friend connections, and the display name
-              you choose for a leaderboard (your username by default), and, unless you turn it off, the address of your profile picture.
+              <strong>Game data.</strong> Your scores, moves, points, streaks, friend connections, the looks you have
+              unlocked, and the display name you choose for a leaderboard (your username by default), and, unless you
+              turn it off, the address of your profile picture. A few accounts we designate as administrators can edit
+              upcoming puzzles and the scores and looks on their own account. Every such change is recorded.
             </li>
             <li>
               <strong>Device data.</strong> An anonymous player ID and your game progress stored in your browser, and a
