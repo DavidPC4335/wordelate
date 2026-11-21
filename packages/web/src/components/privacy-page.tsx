@@ -32,11 +32,11 @@ export function PrivacyPage() {
           <ul>
             <li>
               <strong>Google account information.</strong> If you choose “Log in with Google”, we receive your Google
-              account ID, name, email address, and profile picture address.
+              account ID, name, email address, and the web address of your profile picture. We keep that address only. We never download or store the picture itself.
             </li>
             <li>
               <strong>Game data.</strong> Your scores, moves, points, streaks, friend connections, and the display name
-              you choose for a leaderboard.
+              you choose for a leaderboard (your username by default), and, unless you turn it off, the address of your profile picture.
             </li>
             <li>
               <strong>Device data.</strong> An anonymous player ID and your game progress stored in your browser, and a
@@ -88,8 +88,8 @@ export function PrivacyPage() {
         <section>
           <h2>6. Other people can see some of it</h2>
           <p>
-            Your first name, picture, points, streak, and recent scores are visible to the friends you connect with.
-            Any name you add to a leaderboard is visible to everyone who views that leaderboard.
+            Your username, picture, points, streak, and recent scores are visible to the friends you connect with.
+            Any name you add to a leaderboard, and your profile picture unless you turn it off, is visible to everyone who views that leaderboard.
           </p>
         </section>
 

@@ -4,23 +4,32 @@ import { ago, navigate } from "../lib/route.js";
 import { Avatar, AppLink, GoogleButton } from "./account-bits.js";
 import { StarIcon, FlameIcon, SyncIcon, UserIcon } from "./icons.js";
 
-/** The sync control, shared by the popover and the account page. */
+/**
+ * Scores save to the account on their own. The button only appears when this device holds a lot
+ * of scores that have not been merged yet, or when the last try failed.
+ */
 export function SyncControl() {
   const account = useAccount();
   const busy = account.sync.phase === "syncing";
+  const failed = account.sync.phase === "error";
   const linked = isLinked(account.account);
   let status: string;
-  if (busy) status = "Syncing…";
-  else if (account.sync.phase === "error") status = account.sync.message ?? "Could not sync. Try again.";
-  else if (account.sync.at !== null && linked) status = `Synced ${ago(account.sync.at)}`;
-  else status = "This device is not linked yet. Sync to add its scores to your account.";
+  if (busy) status = "Saving…";
+  else if (failed) status = account.sync.message ?? "Could not save. Try again.";
+  else if (account.needsConfirm) {
+    status = `This device has ${account.localCount} scores to add to your account.`;
+  } else if (account.sync.at !== null && linked) status = `Saved to your account ${ago(account.sync.at)}`;
+  else status = "Your scores save to your account automatically.";
+  const showButton = account.needsConfirm || failed;
   return (
     <div class="sync">
-      <button type="button" class="btn btn-small" disabled={busy} onClick={() => void syncAccount()}>
-        <SyncIcon size={18} class={busy ? "spin" : undefined} />
-        <span>Sync local data with account</span>
-      </button>
-      <p class={account.sync.phase === "error" ? "sync-note sync-error" : "sync-note"} role="status">
+      {showButton ? (
+        <button type="button" class="btn btn-small" disabled={busy} onClick={() => void syncAccount()}>
+          <SyncIcon size={18} class={busy ? "spin" : undefined} />
+          <span>{failed ? "Try again" : "Sync local data with account"}</span>
+        </button>
+      ) : null}
+      <p class={failed ? "sync-note sync-error" : "sync-note"} role="status">
         {status}
         {account.sync.phase === "done" && account.sync.message ? ` ${account.sync.message}` : ""}
       </p>
@@ -59,20 +68,20 @@ export function AccountButton() {
         class={profile ? "icon-btn account-btn account-btn-in" : "icon-btn account-btn"}
         aria-expanded={open}
         aria-haspopup="true"
-        aria-label={profile ? `Account for ${profile.name}` : account.status === "loading" ? "Account" : "Log in"}
-        title={profile ? profile.name : account.status === "loading" ? "Account" : "Log in"}
+        aria-label={profile ? `Account for ${profile.username}` : account.status === "loading" ? "Account" : "Log in"}
+        title={profile ? profile.username : account.status === "loading" ? "Account" : "Log in"}
         onClick={() => setOpen((value) => !value)}
       >
-        {profile ? <Avatar name={profile.name} picture={profile.picture} size={34} /> : <UserIcon size={20} />}
+        {profile ? <Avatar name={profile.username} picture={profile.picture} size={34} /> : <UserIcon size={20} />}
       </button>
       {open ? (
         <div class="popover" role="dialog" aria-label="Account">
           {profile && stats ? (
             <>
               <div class="pop-who">
-                <Avatar name={profile.name} picture={profile.picture} size={44} />
+                <Avatar name={profile.username} picture={profile.picture} size={44} />
                 <div class="pop-who-text">
-                  <strong>{profile.name}</strong>
+                  <strong>{profile.username}</strong>
                   <span>{profile.email}</span>
                 </div>
               </div>
@@ -113,9 +122,12 @@ export function AccountButton() {
               <GoogleButton />
             </>
           )}
-          <AppLink to="/privacy-policy" class="pop-legal">
-            Privacy policy
-          </AppLink>
+          <div class="pop-legal-row">
+            <a href="/home" class="pop-legal">About</a>
+            <AppLink to="/privacy-policy" class="pop-legal">
+              Privacy policy
+            </AppLink>
+          </div>
         </div>
       ) : null}
     </div>

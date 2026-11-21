@@ -6,6 +6,7 @@ import { scoreForMoves } from "../src/lib/storage.js";
 import type { ScoreEntry } from "../src/lib/storage.js";
 import { handleAccount } from "../src/worker/account.js";
 import type { AccountDeps } from "../src/worker/account.js";
+import { accountFromRequest } from "../src/worker/account.js";
 import { backupAccounts, backupKey } from "../src/worker/backup.js";
 import { bytesToBase64Url, pkceChallenge } from "../src/worker/google.js";
 import type { GoogleConfig } from "../src/worker/google.js";
@@ -17,10 +18,9 @@ const DAY = 24 * 60 * 60 * 1000;
 const CLIENT_ID = "client-123.apps.googleusercontent.com";
 const HOME = "http://127.0.0.1";
 
-const SCHEMA = [
-  readFileSync(new URL("../migrations/0001_board.sql", import.meta.url), "utf8"),
-  readFileSync(new URL("../migrations/0002_accounts.sql", import.meta.url), "utf8"),
-].join("\n");
+const SCHEMA = ["0001_board.sql", "0002_accounts.sql", "0003_profile.sql"]
+  .map((file) => readFileSync(new URL(`../migrations/${file}`, import.meta.url), "utf8"))
+  .join("\n");
 
 function openSql(): { sql: Sql; db: DatabaseSync } {
   const db = new DatabaseSync(":memory:");
@@ -752,6 +752,126 @@ describe("deleting an account", () => {
     expect(h.db.prepare("SELECT COUNT(*) AS n FROM users").get()).toMatchObject({ n: 1 });
     expect((await get(h, "/api/account/me", bob.cookie)).status).toBe(200);
     expect((await (await get(h, "/api/friends", bob.cookie)).json()).friends).toHaveLength(0);
+  });
+});
+
+/* ---------- Profile ---------- */
+
+describe("profile", () => {
+  const profileOf = async (h: Harness, cookie: string) => (await (await get(h, "/api/account/me", cookie)).json()).account.profile;
+
+  it("starts with the Google first name as the username, picture shown", async () => {
+    const h = harness();
+    const { cookie } = await login(h, { sub: "ada", name: "Ada Lovelace", given: "Ada" });
+    expect(await profileOf(h, cookie)).toMatchObject({ username: "Ada", name: "Ada Lovelace", showPicture: true });
+  });
+
+  it("changes the username, and keeps it through the next login", async () => {
+    const h = harness();
+    const { cookie } = await login(h, { sub: "ada", name: "Ada Lovelace", given: "Ada" });
+    const done = await post(h, "/api/account/profile", { username: "  Countess  Ada " }, cookie);
+    expect(done.status).toBe(200);
+    expect((await done.json()).account.profile.username).toBe("Countess Ada");
+    const again = await login(h, { sub: "ada", name: "Ada King", given: "Ada" });
+    expect(await profileOf(h, again.cookie)).toMatchObject({ username: "Countess Ada", name: "Ada King" });
+  });
+
+  it("refuses usernames that are empty, too long, or not plain text", async () => {
+    const h = harness();
+    const { cookie } = await login(h, { sub: "ada", given: "Ada" });
+    for (const username of ["", "  ", "x".repeat(25), "<script>", "ada 🔥", "ada\u202eevil", 42, null]) {
+      expect((await post(h, "/api/account/profile", { username }, cookie)).status).toBe(400);
+    }
+    expect((await post(h, "/api/account/profile", {}, cookie)).status).toBe(400);
+    expect((await post(h, "/api/account/profile", { showPicture: "yes" }, cookie)).status).toBe(400);
+    expect((await profileOf(h, cookie)).username).toBe("Ada");
+  });
+
+  it("accepts accented names", async () => {
+    const h = harness();
+    const { cookie } = await login(h, { sub: "ada", given: "Ada" });
+    expect((await post(h, "/api/account/profile", { username: "José Ñandú" }, cookie)).status).toBe(200);
+    expect((await profileOf(h, cookie)).username).toBe("José Ñandú");
+  });
+
+  it("needs a signed-in person and a same-site JSON request", async () => {
+    const h = harness();
+    const { cookie } = await login(h, { sub: "ada", given: "Ada" });
+    expect((await post(h, "/api/account/profile", { username: "Zed" })).status).toBe(401);
+    expect((await post(h, "/api/account/profile", { username: "Zed" }, cookie, { origin: "https://evil.example" })).status).toBe(403);
+  });
+
+  it("hides the picture link from the board entries and brings it back", async () => {
+    const h = harness();
+    const { cookie } = await login(h, { sub: "ada", given: "Ada" });
+    const id = (await profileOf(h, cookie)).id as string;
+    const photo = "https://lh3.googleusercontent.com/a/photo";
+    h.db.prepare(
+      `INSERT INTO scores (day, player_id, puzzle_id, score, moves, answer_json, name, user_id, picture, created_at)
+       VALUES ('2026-11-20', ?, 'a-b', 150, 1, '[]', 'Ada', ?, ?, 1)`,
+    ).run("p".repeat(36), id, photo);
+    const picture = () => (h.db.prepare("SELECT picture FROM scores").get() as { picture: string | null }).picture;
+
+    expect((await post(h, "/api/account/profile", { showPicture: false }, cookie)).status).toBe(200);
+    expect(picture()).toBeNull();
+    expect((await profileOf(h, cookie)).showPicture).toBe(false);
+
+    // Signing in again does not turn it back on.
+    const again = await login(h, { sub: "ada", given: "Ada" });
+    expect((await profileOf(h, again.cookie)).showPicture).toBe(false);
+
+    expect((await post(h, "/api/account/profile", { showPicture: true }, cookie)).status).toBe(200);
+    expect(picture()).toBe(photo);
+  });
+
+  it("keeps a hidden picture from friends too", async () => {
+    const h = harness();
+    const ada = await login(h, { sub: "ada", given: "Ada" });
+    const bob = await login(h, { sub: "bob", given: "Bob" });
+    const link = await befriend(h, ada, bob);
+    expect(link).toBeTruthy();
+    const seen = async () => (await (await get(h, "/api/friends", bob.cookie)).json()).friends[0].picture;
+    expect(await seen()).toBe("https://lh3.googleusercontent.com/a/photo");
+    await post(h, "/api/account/profile", { showPicture: false }, ada.cookie);
+    expect(await seen()).toBeNull();
+  });
+
+  it("gives the board the account only while signed in, without the picture when hidden", async () => {
+    const h = harness();
+    const { cookie } = await login(h, { sub: "ada", given: "Ada" });
+    const request = (cookieHeader: string) => new Request(`${HOME}/api/leaderboard`, { headers: { cookie: cookieHeader } });
+    expect(await accountFromRequest(request(cookie), h.sql, NOW)).toMatchObject({ displayName: "Ada", showPicture: true });
+    expect(await accountFromRequest(request(""), h.sql, NOW)).toBeNull();
+    expect(await accountFromRequest(request("wl_account=nope"), h.sql, NOW)).toBeNull();
+    await post(h, "/api/account/logout", {}, cookie);
+    expect(await accountFromRequest(request(cookie), h.sql, NOW)).toBeNull();
+  });
+
+  it("limits how often the profile can change", async () => {
+    const h = harness();
+    const { cookie } = await login(h, { sub: "ada", given: "Ada" });
+    let last = 200;
+    for (let i = 0; i < 70 && last === 200; i++) {
+      last = (await post(h, "/api/account/profile", { username: `Name${i}` }, cookie)).status;
+    }
+    expect(last).toBe(429);
+  });
+
+  it("scrubs the name, picture and link from board entries when the account is deleted", async () => {
+    const h = harness();
+    const { cookie } = await login(h, { sub: "ada", given: "Ada" });
+    const id = (await profileOf(h, cookie)).id as string;
+    h.db.prepare(
+      `INSERT INTO scores (day, player_id, puzzle_id, score, moves, answer_json, name, user_id, picture, created_at)
+       VALUES ('2026-11-20', ?, 'a-b', 150, 1, '[]', 'Ada', ?, 'https://lh3.googleusercontent.com/a/photo', 1)`,
+    ).run("p".repeat(36), id);
+    expect((await post(h, "/api/account/delete", { confirm: "delete" }, cookie)).status).toBe(200);
+    expect(h.db.prepare("SELECT name, user_id, picture, score FROM scores").get()).toMatchObject({
+      name: null,
+      user_id: null,
+      picture: null,
+      score: 150,
+    });
   });
 });
 

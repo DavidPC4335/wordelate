@@ -10,7 +10,9 @@ import type { BoardDeps, BoardLimits } from "../src/worker/handle.js";
 import type { Sql } from "../src/worker/sql.js";
 
 const SECRET = "test-secret-test-secret-test-secret";
-const SCHEMA = readFileSync(new URL("../migrations/0001_board.sql", import.meta.url), "utf8");
+const SCHEMA = ["0001_board.sql", "0002_accounts.sql", "0003_profile.sql"]
+  .map((file) => readFileSync(new URL(`../migrations/${file}`, import.meta.url), "utf8"))
+  .join("\n");
 const NOW = Date.parse("2026-11-20T15:00:00.000Z");
 
 const puzzle: Puzzle = {
@@ -133,21 +135,21 @@ describe("daily board", () => {
     const first = await session(deps);
     const early = await snapshot(await post(deps, "/api/score", shortPath, first));
     expect(early.submitted).toEqual({ score: 150, counted: true });
-    expect(early.you).toMatchObject({ score: 150, rank: 1, total: 1, betterThan: 0, nameEligible: true, named: false });
+    expect(early.you).toMatchObject({ score: 150, rank: 1, total: 1, betterThan: 100, nameEligible: true, named: false });
     expect(early.top[0]).toMatchObject({
       rank: 1,
       name: "Anonymous",
       score: 150,
       answer: "alpha + bridge",
-      betterThan: 0,
+      betterThan: 100,
     });
 
     clock.now += 1000;
     const second = await session(deps);
     const later = await snapshot(await post(deps, "/api/score", shortPath, second));
     expect(later.top.map((entry) => entry.score)).toEqual([150, 150]);
-    expect(later.you).toMatchObject({ rank: 2, betterThan: 0 });
-    expect(later.top[0]?.betterThan).toBe(0);
+    expect(later.you).toMatchObject({ rank: 2, betterThan: 50 });
+    expect(later.top[0]?.betterThan).toBe(50);
     expect(later.top[1]?.rank).toBe(2);
   });
 
@@ -188,9 +190,9 @@ describe("daily board", () => {
     const sixth = await session(deps);
     const low = await snapshot(await post(deps, "/api/score", longPath, sixth));
     expect(low.submitted).toEqual({ score: 140, counted: true });
-    expect(low.you).toMatchObject({ score: 140, rank: 6, nameEligible: false, betterThan: 0 });
+    expect(low.you).toMatchObject({ score: 140, rank: 6, nameEligible: false, betterThan: 16 });
     expect(low.top).toHaveLength(5);
-    expect(low.top[0]?.betterThan).toBe(16);
+    expect(low.top[0]?.betterThan).toBe(33);
 
     const refused = await post(deps, "/api/name", { name: "Sneaky" }, sixth);
     expect(refused.status).toBe(403);
@@ -295,5 +297,111 @@ describe("daily board", () => {
     await expect(archiveExpiredDays(sql, archive, "2026-11-14", clock.now)).rejects.toThrow(/2026-11-10/);
     const oldRows = await sql.get<{ n: number }>("SELECT COUNT(*) AS n FROM scores WHERE day = ?", ["2026-11-10"]);
     expect(Number(oldRows?.n)).toBe(1);
+  });
+});
+
+describe("leaderboard with an account", () => {
+  const ada = { id: "11111111-1111-4111-8111-111111111111", name: "Ada", picture: "https://lh3.googleusercontent.com/a/ada" };
+  const bob = { id: "22222222-2222-4222-8222-222222222222", name: "Bob", picture: null };
+
+  async function leaderboard(deps: BoardDeps, cookie: string): Promise<BoardSnapshot> {
+    return snapshot(
+      await handleBoard(
+        new Request("http://127.0.0.1/api/leaderboard", { headers: { cookie, "cf-connecting-ip": "203.0.113.9" } }),
+        deps,
+      ),
+    );
+  }
+
+  it("puts the account username and picture link on a top score without asking", async () => {
+    const { deps } = harness();
+    deps.account = async () => ada;
+    const cookie = await session(deps);
+    const board = await snapshot(await post(deps, "/api/score", shortPath, cookie));
+    expect(board.you).toMatchObject({
+      named: true,
+      nameEligible: false,
+      displayName: "Ada",
+      picture: ada.picture,
+      linked: true,
+    });
+    expect(board.top[0]).toMatchObject({ name: "Ada", picture: ada.picture });
+  });
+
+  it("leaves the picture off when the account hides it", async () => {
+    const { deps } = harness();
+    deps.account = async () => ({ ...ada, picture: null });
+    const cookie = await session(deps);
+    const board = await snapshot(await post(deps, "/api/score", shortPath, cookie));
+    expect(board.top[0]).toMatchObject({ name: "Ada", picture: null });
+  });
+
+  it("does not name a score outside the top five", async () => {
+    const { deps } = harness();
+    for (let i = 0; i < 5; i++) {
+      const cookie = await session(deps, `203.0.113.${i + 20}`);
+      await post(deps, "/api/score", shortPath, cookie, { "cf-connecting-ip": `203.0.113.${i + 20}` });
+    }
+    deps.account = async () => ada;
+    const cookie = await session(deps);
+    const board = await snapshot(await post(deps, "/api/score", longPath, cookie));
+    expect(board.you).toMatchObject({ rank: 6, named: false, linked: false });
+  });
+
+  it("falls back to asking when the username cannot be shown", async () => {
+    const { deps } = harness();
+    deps.account = async () => ({ ...ada, name: "ada 🔥" });
+    const cookie = await session(deps);
+    const board = await snapshot(await post(deps, "/api/score", shortPath, cookie));
+    expect(board.you).toMatchObject({ named: false, nameEligible: true, linked: false });
+  });
+
+  it("names an earlier anonymous score when the person signs in afterwards", async () => {
+    const { deps } = harness();
+    const cookie = await session(deps);
+    await post(deps, "/api/score", shortPath, cookie);
+    expect((await leaderboard(deps, cookie)).you).toMatchObject({ named: false, nameEligible: true });
+    deps.account = async () => ada;
+    const board = await leaderboard(deps, cookie);
+    expect(board.you).toMatchObject({ named: true, displayName: "Ada", linked: true, picture: ada.picture });
+  });
+
+  it("lets the owner change the name again and again, and nobody else", async () => {
+    const { deps } = harness();
+    deps.account = async () => ada;
+    const cookie = await session(deps);
+    await post(deps, "/api/score", shortPath, cookie);
+
+    const renamed = await snapshot(await post(deps, "/api/name", { name: "Countess" }, cookie));
+    expect(renamed.you).toMatchObject({ displayName: "Countess", linked: true });
+    const again = await snapshot(await post(deps, "/api/name", { name: "Augusta Ada" }, cookie));
+    expect(again.top[0]?.name).toBe("Augusta Ada");
+    expect((await post(deps, "/api/name", { name: "<b>x</b>" }, cookie)).status).toBe(400);
+
+    // The same browser, signed in as someone else, or signed out, cannot change it.
+    deps.account = async () => bob;
+    expect((await post(deps, "/api/name", { name: "Mine now" }, cookie)).status).toBe(409);
+    deps.account = async () => null;
+    expect((await post(deps, "/api/name", { name: "Mine now" }, cookie)).status).toBe(409);
+    expect((await leaderboard(deps, cookie)).top[0]?.name).toBe("Augusta Ada");
+  });
+
+  it("does not hand another account an entry that already belongs to someone", async () => {
+    const { deps, sql } = harness();
+    deps.account = async () => ada;
+    const cookie = await session(deps);
+    await post(deps, "/api/score", shortPath, cookie);
+    await sql.run(`UPDATE scores SET name = NULL`, []);
+    deps.account = async () => bob;
+    const board = await leaderboard(deps, cookie);
+    expect(board.you).toMatchObject({ named: false, linked: false });
+  });
+
+  it("still asks an anonymous player once, and only once", async () => {
+    const { deps } = harness();
+    const cookie = await session(deps);
+    await post(deps, "/api/score", shortPath, cookie);
+    expect((await post(deps, "/api/name", { name: "Zed" }, cookie)).status).toBe(200);
+    expect((await post(deps, "/api/name", { name: "Zed2" }, cookie)).status).toBe(409);
   });
 });

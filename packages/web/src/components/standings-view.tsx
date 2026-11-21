@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, useState } from "preact/hooks";
 import { ANONYMOUS, TOP_SIZE, bellPoint, curveMarker } from "../lib/standings.js";
 import type { BoardEntry, BoardSnapshot } from "../lib/standings.js";
+import { Avatar } from "./account-bits.js";
 import { ArrowIcon, CheckIcon, StarIcon, TrophyIcon } from "./icons.js";
+import { PictureToggle } from "./profile-controls.js";
 
 type You = NonNullable<BoardSnapshot["you"]>;
 type NameHandler = (name: string) => Promise<string | null>;
@@ -51,12 +53,15 @@ export function StandingsView({
   snapshot,
   state,
   onName,
+  onRefresh,
   today = true,
   onRetry,
 }: {
   snapshot: BoardSnapshot | null;
   state: "loading" | "ready" | "off" | "error";
   onName?: NameHandler;
+  /** Reload the board after the profile picture was shown or hidden. */
+  onRefresh?: () => void;
   /** False for a past day: the wording changes and no name can be added. */
   today?: boolean;
   onRetry?: () => void;
@@ -70,7 +75,7 @@ export function StandingsView({
         <BoardEmpty today={today} />
       ) : (
         <>
-          <YourStanding snapshot={snapshot} onName={onName} today={today} />
+          <YourStanding snapshot={snapshot} onName={onName} onRefresh={onRefresh} today={today} />
           <TopList snapshot={snapshot} />
         </>
       )}
@@ -124,10 +129,12 @@ function BoardEmpty({ today }: { today: boolean }) {
 function YourStanding({
   snapshot,
   onName,
+  onRefresh,
   today,
 }: {
   snapshot: BoardSnapshot;
   onName?: NameHandler;
+  onRefresh?: () => void;
   today: boolean;
 }) {
   const you = snapshot.you;
@@ -141,7 +148,7 @@ function YourStanding({
   const onBoard = you.rank <= TOP_SIZE;
   return (
     <>
-      {onBoard ? <Cheer you={you} today={today} onName={onName} /> : null}
+      {onBoard ? <Cheer you={you} today={today} onName={onName} onRefresh={onRefresh} /> : null}
       {you.total > 1 ? <StandCard you={you} held={Boolean(snapshot.submitted && !snapshot.submitted.counted)} today={today} /> : null}
     </>
   );
@@ -193,11 +200,12 @@ function medalClass(rank: number): string {
   return rank <= 3 ? `medal medal-${rank}` : "medal";
 }
 
-function Cheer({ you, today, onName }: { you: You; today: boolean; onName?: NameHandler }) {
+function Cheer({ you, today, onName, onRefresh }: { you: You; today: boolean; onName?: NameHandler; onRefresh?: () => void }) {
   const fieldId = useId();
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [changing, setChanging] = useState(false);
   const askName = you.nameEligible && !you.named && onName != null;
   const card = useRef<HTMLElement>(null);
   // The board arrives after the dialog opens. Bring the name prompt into view so it is not missed.
@@ -234,7 +242,7 @@ function Cheer({ you, today, onName }: { you: You; today: boolean; onName?: Name
       <p class="cheer-sub">
         {standing} Score {you.score}.
       </p>
-      {askName ? (
+      {askName || changing ? (
         <form
           class="cheer-form"
           onSubmit={(event) => {
@@ -245,11 +253,12 @@ function Cheer({ you, today, onName }: { you: You; today: boolean; onName?: Name
             void onName(draft).then((message) => {
               setPending(false);
               setError(message);
+              if (!message) setChanging(false);
             });
           }}
         >
           <label class="cheer-label" for={fieldId}>
-            Put your name on the board
+            {changing ? "Change your name on the board" : "Put your name on the board"}
           </label>
           <div class="cheer-row">
             <input
@@ -264,11 +273,25 @@ function Cheer({ you, today, onName }: { you: You; today: boolean; onName?: Name
               onInput={(event) => setDraft(event.currentTarget.value)}
             />
             <button type="submit" class="btn btn-go cheer-btn" disabled={pending || draft.trim().length === 0}>
-              {pending ? "Saving…" : "Add my name"}
+              {pending ? "Saving…" : changing ? "Save" : "Add my name"}
             </button>
+            {changing ? (
+              <button
+                type="button"
+                class="text-button"
+                onClick={() => {
+                  setChanging(false);
+                  setError(null);
+                }}
+              >
+                Cancel
+              </button>
+            ) : null}
           </div>
           <p class="cheer-hint">
-            Everyone can see it. Letters and numbers, up to 24. Skip it and you stay {ANONYMOUS}.
+            {changing
+              ? "Changes this day's board only. Change your username in your account to use a new name every day."
+              : `Everyone can see it. Letters and numbers, up to 24. Skip it and you stay ${ANONYMOUS}.`}
           </p>
           {error ? (
             <p class="cheer-error" role="alert">
@@ -277,12 +300,27 @@ function Cheer({ you, today, onName }: { you: You; today: boolean; onName?: Name
           ) : null}
         </form>
       ) : you.named ? (
-        <p class="cheer-named">
-          <CheckIcon size={16} />
-          <span>
-            On the board as <strong>{you.displayName}</strong>
-          </span>
-        </p>
+        <>
+          <p class="cheer-named">
+            {you.picture ? <Avatar name={you.displayName} picture={you.picture} size={22} /> : <CheckIcon size={16} />}
+            <span>
+              On the board as <strong>{you.displayName}</strong>
+            </span>
+            {you.linked && onName ? (
+              <button
+                type="button"
+                class="text-button cheer-change"
+                onClick={() => {
+                  setDraft(you.displayName);
+                  setChanging(true);
+                }}
+              >
+                Change
+              </button>
+            ) : null}
+          </p>
+          {you.linked && today ? <PictureToggle onChanged={onRefresh} /> : null}
+        </>
       ) : null}
     </section>
   );
@@ -321,6 +359,7 @@ function Row({ entry, index, mine }: { entry: BoardEntry; index: number; mine: b
       <span class="board-main">
         <span class="board-who">
           <span class={entry.name === ANONYMOUS ? "board-who-name board-anon" : "board-who-name"}>
+            {entry.picture ? <Avatar name={entry.name} picture={entry.picture} size={22} /> : null}
             {entry.name}
             {mine ? <span class="board-you-tag">You</span> : null}
           </span>

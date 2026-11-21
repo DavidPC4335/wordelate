@@ -13,7 +13,7 @@ import {
 } from "../lib/standings.js";
 import type { BoardSnapshot, BoardStep } from "../lib/standings.js";
 import { calendarDay } from "../lib/storage.js";
-import { allowHit, buckets, getScore, rankOf, saveBest, setName, topScores } from "./board-db.js";
+import { adoptAccount, allowHit, buckets, getScore, rankOf, renameOwn, saveBest, setName, topScores } from "./board-db.js";
 import { clientIp, fail, json, originAllowed, secureRequest } from "./http.js";
 import type { Failure } from "./http.js";
 import { issueSession, readCookie, readSession, sessionCookie } from "./session.js";
@@ -46,8 +46,15 @@ export type BoardDeps = {
   puzzle: (id: string) => Puzzle | null;
   /** Only this puzzle can post a score. Past days are for practice. */
   dailyPuzzleId: string;
+  /**
+   * The account signed in on this request, if any. The picture is already null
+   * when the person chose not to show it.
+   */
+  account?: (request: Request) => Promise<BoardAccount | null>;
   limits?: BoardLimits;
 };
+
+export type BoardAccount = { id: string; name: string; picture: string | null };
 
 async function readBody(request: Request): Promise<{ ok: true; value: unknown } | Failure> {
   const declared = Number(request.headers.get("content-length") ?? "0");
@@ -93,6 +100,7 @@ async function snapshotFor(
   day: string,
   playerId: string | null,
   submitted: BoardSnapshot["submitted"],
+  accountId: string | null = null,
 ): Promise<BoardSnapshot> {
   const counts = await buckets(sql, day);
   const total = counts.reduce((sum, bucket) => sum + bucket.n, 0);
@@ -112,6 +120,7 @@ async function snapshotFor(
       steps: row.answer.steps,
       betterThan: betterThanPercent(below, total),
       place: curvePlace(below, tied, total),
+      picture: row.picture,
     };
   });
   let you: BoardSnapshot["you"] = null;
@@ -130,10 +139,27 @@ async function snapshotFor(
         nameEligible: rank <= TOP_SIZE && row.name == null,
         named: row.name != null,
         displayName: row.name ?? ANONYMOUS,
+        picture: row.picture,
+        linked: accountId !== null && row.userId === accountId,
       };
     }
   }
   return { day, total, top, you, submitted };
+}
+
+/**
+ * A signed-in player with a top score and no name gets their username on the board
+ * without being asked. They can change it afterwards.
+ */
+async function nameFromAccount(deps: BoardDeps, day: string, playerId: string, account: BoardAccount | null): Promise<void> {
+  if (!account) return;
+  const name = cleanName(account.name);
+  if (!name) return;
+  const row = await getScore(deps.sql, day, playerId);
+  if (!row || row.name != null || (row.userId != null && row.userId !== account.id)) return;
+  const rank = await rankOf(deps.sql, day, row.score, row.createdAt);
+  if (rank > TOP_SIZE) return;
+  await adoptAccount(deps.sql, day, playerId, { id: account.id, name, picture: account.picture });
 }
 
 export async function handleBoard(request: Request, deps: BoardDeps): Promise<Response> {
@@ -160,7 +186,9 @@ export async function handleBoard(request: Request, deps: BoardDeps): Promise<Re
     const requested = url.searchParams.get("day") ?? today;
     if (!dayInWindow(requested, today)) return fail(404, "That day is not on the board.");
     const session = await readSession(deps.secret, readCookie(request.headers.get("cookie")) ?? "", now);
-    const snapshot = await snapshotFor(deps.sql, requested, session?.playerId ?? null, null);
+    const account = (await deps.account?.(request)) ?? null;
+    if (session && requested === today) await nameFromAccount(deps, today, session.playerId, account);
+    const snapshot = await snapshotFor(deps.sql, requested, session?.playerId ?? null, null, account?.id ?? null);
     return json(snapshot, 200);
   }
 
@@ -192,10 +220,15 @@ export async function handleBoard(request: Request, deps: BoardDeps): Promise<Re
       createdAt: now,
     });
     console.log(JSON.stringify({ event: "score", day: today, puzzleId: puzzle.id, score: verified.score, counted: saved.counted }));
-    const snapshot = await snapshotFor(deps.sql, today, session.playerId, {
-      score: verified.score,
-      counted: saved.counted,
-    });
+    const account = (await deps.account?.(request)) ?? null;
+    await nameFromAccount(deps, today, session.playerId, account);
+    const snapshot = await snapshotFor(
+      deps.sql,
+      today,
+      session.playerId,
+      { score: verified.score, counted: saved.counted },
+      account?.id ?? null,
+    );
     return json(snapshot, 200);
   }
 
@@ -218,12 +251,15 @@ export async function handleBoard(request: Request, deps: BoardDeps): Promise<Re
     if (!name) return fail(400, "Use letters and numbers, up to 24 characters.");
     const row = await getScore(deps.sql, today, session.playerId);
     if (!row) return fail(403, "Only a top score can carry a name.");
-    if (row.name != null) return fail(409, "This score already has a name.");
+    const account = (await deps.account?.(request)) ?? null;
+    // Someone signed in may rename their own entry. Anyone else names a score once.
+    const own = account !== null && row.userId === account.id;
+    if (row.name != null && !own) return fail(409, "This score already has a name.");
     const rank = await rankOf(deps.sql, today, row.score, row.createdAt);
     if (rank > TOP_SIZE) return fail(403, "Only a top score can carry a name.");
-    const wrote = await setName(deps.sql, today, session.playerId, name);
+    const wrote = own && account ? await renameOwn(deps.sql, today, session.playerId, account.id, name) : await setName(deps.sql, today, session.playerId, name);
     if (!wrote) return fail(409, "This score already has a name.");
-    const snapshot = await snapshotFor(deps.sql, today, session.playerId, null);
+    const snapshot = await snapshotFor(deps.sql, today, session.playerId, null, account?.id ?? null);
     return json(snapshot, 200);
   }
 

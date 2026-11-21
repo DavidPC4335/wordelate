@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { MAX_SYNC_SCORES, mergeScores, scoreKey, streakFromDays } from "./account.js";
+import { AUTO_SYNC_MAX, MAX_SYNC_SCORES, mergeScores, scoreKey, streakFromDays } from "./account.js";
 import type { AccountStats, AccountView } from "./account.js";
 import { accountApi } from "./account-api.js";
 import {
@@ -27,6 +27,13 @@ export type AccountState = {
   account: AccountView | null;
   stats: AccountStats | null;
   sync: { phase: SyncPhase; message: string | null; at: number | null };
+  /**
+   * True when this device holds a lot of scores and the account already has some, so
+   * merging them waits for a tap instead of happening on its own.
+   */
+  needsConfirm: boolean;
+  /** How many scores this device would add. Only meaningful while `needsConfirm` is true. */
+  localCount: number;
   /** Bumps when a sync changed what this device holds, so the game can read it again. */
   localVersion: number;
 };
@@ -36,6 +43,8 @@ let state: AccountState = {
   account: null,
   stats: null,
   sync: { phase: "idle", message: null, at: readSyncedAt() },
+  needsConfirm: false,
+  localCount: 0,
   localVersion: 0,
 };
 
@@ -73,7 +82,7 @@ export function isLinked(account: AccountView | null): boolean {
 }
 
 function signedOut(): void {
-  update({ status: "out", account: null, stats: null, sync: { phase: "idle", message: null, at: state.sync.at } });
+  update({ status: "out", account: null, stats: null, needsConfirm: false, localCount: 0, sync: { phase: "idle", message: null, at: state.sync.at } });
 }
 
 /** The scores the account has that this device lacks or holds worse. They are added. Nothing is removed. */
@@ -110,8 +119,18 @@ function stamp(now: number): void {
 export async function loadAccount(): Promise<void> {
   const reply = await accountApi.me();
   if (reply.ok) {
-    update({ status: "in", account: reply.value.account, stats: reply.value.account.stats });
-    if (isLinked(reply.value.account)) void syncAccount();
+    const account = reply.value.account;
+    update({ status: "in", account, stats: account.stats });
+    if (isLinked(account) || account.stats.wins === 0) {
+      // Already linked, or a brand new account: nothing to decide. Save quietly.
+      void syncAccount();
+    } else {
+      const count = mergeScores(readScores()).length;
+      // A few scores merge on their own. A lot waits for the person to say so.
+      if (count <= AUTO_SYNC_MAX) void syncAccount();
+      else update({ needsConfirm: true, localCount: count });
+    }
+    watchVisibility();
     return;
   }
   if (reply.status === 401) {
@@ -120,6 +139,23 @@ export async function loadAccount(): Promise<void> {
   }
   // The server could not be reached. Stay out of the way and let play continue.
   update({ status: "out" });
+}
+
+let watching = false;
+let lastCheck = 0;
+const RECHECK_MS = 5 * 60 * 1000;
+
+/** Coming back to the tab after a while picks up wins from the account's other devices. */
+function watchVisibility(): void {
+  if (watching || typeof document === "undefined") return;
+  watching = true;
+  lastCheck = Date.now();
+  document.addEventListener("visibilitychange", () => {
+    const now = Date.now();
+    if (document.visibilityState !== "visible" || now - lastCheck < RECHECK_MS) return;
+    lastCheck = now;
+    if (state.status === "in" && isLinked(state.account) && state.sync.phase !== "syncing") void syncAccount();
+  });
 }
 
 /**
@@ -158,6 +194,8 @@ export async function syncAccount(): Promise<boolean> {
   stamp(now);
   update({
     stats: last.stats,
+    needsConfirm: false,
+    localCount: 0,
     sync: {
       phase: "done",
       message: rejected > 0 ? `${rejected} older ${rejected === 1 ? "score" : "scores"} could not be saved.` : null,
@@ -194,3 +232,14 @@ async function end(call: () => Promise<{ ok: boolean }>): Promise<boolean> {
 export const logout = () => end(() => accountApi.logout());
 export const logoutEverywhere = () => end(() => accountApi.logoutAll());
 export const deleteAccount = () => end(() => accountApi.remove());
+
+/** Change the username and/or whether the profile picture shows on the leaderboard. Returns an error message, or null. */
+export async function updateProfile(change: { username?: string; showPicture?: boolean }): Promise<string | null> {
+  const reply = await accountApi.profile(change);
+  if (!reply.ok) {
+    if (reply.status === 401) signedOut();
+    return reply.error;
+  }
+  update({ account: reply.value.account });
+  return null;
+}

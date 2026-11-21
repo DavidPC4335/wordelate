@@ -26,6 +26,8 @@ function archiveBody(day: string, archivedAt: string, scores: readonly ScoreRow[
       moves: row.moves,
       answer: row.answer,
       name: row.name,
+      userId: row.userId,
+      picture: row.picture,
       createdAt: row.createdAt,
     })),
   });

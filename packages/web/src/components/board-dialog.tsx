@@ -106,6 +106,11 @@ export function BoardDialog({
           snapshot={snapshot}
           state={state}
           today={isToday}
+          onRefresh={() => {
+            void loadBoard().then((fresh) => {
+              if (fresh) setSnapshot(fresh);
+            });
+          }}
           onRetry={() => setAttempt((count) => count + 1)}
           onName={
             isToday

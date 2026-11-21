@@ -8,6 +8,8 @@ export const MAX_ACCOUNT_SCORES = 3000;
 export const MAX_FRIENDS = 50;
 /** How many recent days each friend shows. */
 export const FRIEND_DAYS = 7;
+/** Up to this many local scores sync on their own. More than this waits for a tap. */
+export const AUTO_SYNC_MAX = 40;
 /** No score may be older than the game itself. */
 export const EARLIEST_DAY = "2026-01-01";
 
@@ -22,7 +24,12 @@ export type AccountStats = {
 
 export type AccountProfile = {
   id: string;
+  /** The username friends and leaderboards see. */
+  username: string;
+  /** The full name Google gave, shown only to the person themself. */
   name: string;
+  /** Whether the picture link may appear on the leaderboard. */
+  showPicture: boolean;
   email: string;
   picture: string | null;
   memberSince: number;

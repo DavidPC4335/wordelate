@@ -1,12 +1,13 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { FRIEND_DAYS } from "../lib/account.js";
-import type { FriendDay, FriendView } from "../lib/account.js";
+import type { AccountProfile, FriendDay, FriendView } from "../lib/account.js";
 import { accountApi } from "../lib/account-api.js";
-import { deleteAccount, logout, logoutEverywhere, useAccount } from "../lib/account-store.js";
+import { deleteAccount, logout, logoutEverywhere, updateProfile, useAccount } from "../lib/account-store.js";
 import { shiftDay } from "../lib/standings.js";
 import { calendarDay, readScores } from "../lib/storage.js";
 import { Avatar, AppLink, GoogleButton } from "./account-bits.js";
+import { PictureToggle } from "./profile-controls.js";
 import { SyncControl } from "./account-popover.js";
 import { CheckIcon, CopyIcon, FlameIcon, LinkIcon, ShareIcon, StarIcon, UsersIcon } from "./icons.js";
 
@@ -27,6 +28,9 @@ export function PageFrame({ title, children }: { title: string; children: Compon
         {children}
       </main>
       <footer class="page-foot">
+        <a href="/home" class="text-button">
+          About Wordelate
+        </a>
         <AppLink to="/privacy-policy" class="text-button">
           Privacy policy
         </AppLink>
@@ -171,6 +175,83 @@ function InviteCard({ path, onReset }: { path: string; onReset: () => Promise<st
   );
 }
 
+function ProfileCard({ profile, since }: { profile: AccountProfile; since: string }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(profile.username);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <section class="card card-profile" aria-labelledby="profile-title">
+      <Avatar name={profile.username} picture={profile.picture} size={64} />
+      <div class="profile-text">
+        {editing ? (
+          <form
+            class="profile-edit"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              setBusy(true);
+              const message = await updateProfile({ username: draft });
+              setBusy(false);
+              setError(message);
+              if (!message) setEditing(false);
+            }}
+          >
+            <label class="cheer-label" for="username-field">Username</label>
+            <div class="cheer-row">
+              <input
+                id="username-field"
+                class="cheer-input"
+                maxLength={24}
+                autoComplete="nickname"
+                spellcheck={false}
+                value={draft}
+                disabled={busy}
+                onInput={(event) => setDraft(event.currentTarget.value)}
+              />
+              <button type="submit" class="btn btn-small" disabled={busy || draft.trim().length === 0}>
+                {busy ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                class="text-button"
+                onClick={() => {
+                  setEditing(false);
+                  setError(null);
+                  setDraft(profile.username);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+            {error ? (
+              <p class="card-note sync-error" role="alert">{error}</p>
+            ) : (
+              <p class="card-note">Friends and the leaderboard see this. Letters and numbers, up to 24.</p>
+            )}
+          </form>
+        ) : (
+          <>
+            <h2 class="profile-name" id="profile-title">{profile.username}</h2>
+            <p class="profile-email">{profile.email}</p>
+            <p class="profile-since">Playing since {since}</p>
+            <button
+              type="button"
+              class="text-button profile-change"
+              onClick={() => {
+                setDraft(profile.username);
+                setEditing(true);
+              }}
+            >
+              Change username
+            </button>
+          </>
+        )}
+        {profile.picture ? <PictureToggle /> : null}
+      </div>
+    </section>
+  );
+}
+
 function DangerZone() {
   const [step, setStep] = useState<"idle" | "confirm">("idle");
   const [typed, setTyped] = useState("");
@@ -284,14 +365,7 @@ export function AccountPage() {
 
   return (
     <PageFrame title="Account">
-      <section class="card card-profile">
-        <Avatar name={profile.name} picture={profile.picture} size={64} />
-        <div class="profile-text">
-          <h2 class="profile-name">{profile.name}</h2>
-          <p class="profile-email">{profile.email}</p>
-          <p class="profile-since">Playing since {since}</p>
-        </div>
-      </section>
+      <ProfileCard profile={profile} since={since} />
 
       <section class="stat-grid" aria-label="Your stats">
         <div class="stat stat-points"><StarIcon size={20} /><strong>{stats.totalPoints}</strong><span>points</span></div>
@@ -302,7 +376,7 @@ export function AccountPage() {
 
       <section class="card" aria-labelledby="sync-title">
         <h2 class="card-title" id="sync-title">Sync</h2>
-        <p class="card-text">New wins are saved to your account as soon as you finish a game. Use this to bring in scores from this device, or to pull your account’s scores onto it.</p>
+        <p class="card-text">New wins are saved to your account as soon as you finish a game. Scores from this device are added the first time you log in, and your account’s scores come back to it.</p>
         <SyncControl />
       </section>
 
@@ -324,7 +398,7 @@ export function AccountPage() {
         <ul class="friend-list">
           <li class="friend friend-you">
             <div class="friend-head">
-              <Avatar name={profile.name} picture={profile.picture} size={38} />
+              <Avatar name={profile.username} picture={profile.picture} size={38} />
               <strong class="friend-name">You</strong>
               <span class="chip chip-points"><StarIcon size={14} />{stats.totalPoints}</span>
               <span class={stats.streak > 0 ? "chip chip-streak" : "chip chip-off"}><FlameIcon size={14} />{stats.streak}</span>

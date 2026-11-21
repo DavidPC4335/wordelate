@@ -1581,6 +1581,14 @@ button:focus-visible, input:focus-visible, summary:focus-visible, .dot:focus-vis
   font-weight: 800;
 }
 .cheer-named strong { font-family: var(--display); font-size: 1.05rem; }
+.cheer-named .avatar { box-shadow: 0 0 0 2px var(--line); }
+.cheer-change { margin-left: 0.2rem; font-size: 0.85rem; }
+.picture-toggle { display: grid; gap: 0.3rem; margin-top: 0.35rem; }
+.check { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.88rem; font-weight: 700; cursor: pointer; }
+.check input { width: 1.15rem; height: 1.15rem; flex: none; accent-color: var(--primary-deep); cursor: pointer; }
+.board-cheer .picture-toggle { justify-items: center; color: var(--ink); }
+.profile-edit { display: grid; gap: 0.4rem; }
+.profile-change { justify-self: start; margin-top: 0.15rem; }
 
 /* Where you stand */
 .board-stand { display: grid; gap: 0.35rem; padding: 0.9rem 1rem 1rem; border: 2px solid var(--line); border-radius: 22px; background: #faf9ff; }
@@ -1971,7 +1979,8 @@ button:focus-visible, input:focus-visible, summary:focus-visible, .dot:focus-vis
 }
 
 /* Legal pages and footer links */
-.page-foot { display: flex; justify-content: center; padding: 0 0.9rem 2rem; }
+.page-foot { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem 1.4rem; padding: 0 0.9rem 2rem; }
+.pop-legal-row { display: flex; justify-content: center; gap: 1.2rem; }
 .pop-legal { justify-self: center; color: var(--ink-soft); font-size: 0.82rem; font-weight: 700; text-decoration: underline; text-underline-offset: 0.2em; }
 .pop-legal:hover { color: var(--primary); }
 

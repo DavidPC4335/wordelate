@@ -34,6 +34,7 @@ async function call<T>(path: string, body?: unknown): Promise<Reply<T>> {
 export const accountApi = {
   me: () => call<{ account: AccountView }>("/api/account/me"),
   sync: (scores: readonly unknown[]) => call<SyncResult>("/api/account/sync", { scores }),
+  profile: (change: { username?: string; showPicture?: boolean }) => call<{ account: AccountView }>("/api/account/profile", change),
   resetInvite: () => call<{ invitePath: string }>("/api/account/invite/reset", {}),
   logout: () => call<{ ok: true }>("/api/account/logout", {}),
   logoutAll: () => call<{ ok: true }>("/api/account/logout-all", {}),

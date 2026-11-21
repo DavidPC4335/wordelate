@@ -1,6 +1,7 @@
 import { statsFor, streakFromDays } from "../lib/account.js";
 import { daysBetween } from "../lib/standings.js";
 import type { ScoreEntry } from "../lib/storage.js";
+import { forgetUser } from "./board-db.js";
 import type { Sql } from "./sql.js";
 
 export type UserRow = {
@@ -10,6 +11,10 @@ export type UserRow = {
   fullName: string;
   displayName: string;
   picture: string | null;
+  /** True once the person chose their own username, so a later login does not overwrite it. */
+  usernameSet: boolean;
+  /** Whether the picture link may appear on the leaderboard. */
+  showPicture: boolean;
   inviteGen: number;
   totalPoints: number;
   wins: number;
@@ -27,6 +32,8 @@ type UserRecord = {
   full_name: string;
   display_name: string;
   picture: string | null;
+  username_set: number;
+  show_picture: number;
   invite_gen: number;
   total_points: number;
   wins: number;
@@ -38,7 +45,7 @@ type UserRecord = {
 };
 
 const USER_COLUMNS =
-  "id, google_sub, email, full_name, display_name, picture, invite_gen, total_points, wins, streak, streak_day, best_streak, created_at, last_login_at";
+  "id, google_sub, email, full_name, display_name, picture, username_set, show_picture, invite_gen, total_points, wins, streak, streak_day, best_streak, created_at, last_login_at";
 
 function userFrom(record: UserRecord): UserRow {
   return {
@@ -48,6 +55,8 @@ function userFrom(record: UserRecord): UserRow {
     fullName: record.full_name,
     displayName: record.display_name,
     picture: record.picture,
+    usernameSet: Number(record.username_set) === 1,
+    showPicture: Number(record.show_picture) !== 0,
     inviteGen: Number(record.invite_gen),
     totalPoints: Number(record.total_points),
     wins: Number(record.wins),
@@ -77,7 +86,7 @@ export async function upsertUser(
      ON CONFLICT (google_sub) DO UPDATE SET
        email = excluded.email,
        full_name = excluded.full_name,
-       display_name = excluded.display_name,
+       display_name = CASE WHEN users.username_set = 1 THEN users.display_name ELSE excluded.display_name END,
        picture = excluded.picture,
        last_login_at = excluded.last_login_at`,
     [newId, profile.sub, profile.email, profile.fullName, profile.displayName, profile.picture, now, now],
@@ -276,7 +285,29 @@ export async function recentScores(
 }
 
 /** Remove the person and everything that belongs to them. */
+/** Change the username and/or whether the picture may be shown. Returns false when nothing was found. */
+export async function updateProfile(
+  sql: Sql,
+  userId: string,
+  change: { username?: string; showPicture?: boolean },
+): Promise<boolean> {
+  const sets: string[] = [];
+  const params: (string | number)[] = [];
+  if (change.username !== undefined) {
+    sets.push("display_name = ?", "username_set = 1");
+    params.push(change.username);
+  }
+  if (change.showPicture !== undefined) {
+    sets.push("show_picture = ?");
+    params.push(change.showPicture ? 1 : 0);
+  }
+  if (sets.length === 0) return true;
+  params.push(userId);
+  return (await sql.run(`UPDATE users SET ${sets.join(", ")} WHERE id = ?`, params)) === 1;
+}
+
 export async function deleteUser(sql: Sql, userId: string): Promise<void> {
+  await forgetUser(sql, userId);
   await sql.run(`DELETE FROM sessions WHERE user_id = ?`, [userId]);
   await sql.run(`DELETE FROM friendships WHERE user_a = ? OR user_b = ?`, [userId, userId]);
   await sql.run(`DELETE FROM account_scores WHERE user_id = ?`, [userId]);

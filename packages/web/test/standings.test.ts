@@ -11,11 +11,16 @@ describe("board days", () => {
 });
 
 describe("betterThanPercent", () => {
-  it("counts only players with a lower score", () => {
-    expect(betterThanPercent(0, 4)).toBe(0);
-    expect(betterThanPercent(1, 2)).toBe(50);
-    expect(betterThanPercent(2, 3)).toBe(66);
-    expect(betterThanPercent(999, 1000)).toBe(99);
+  it("counts the players below you, and you", () => {
+    // Rank 2 of 4 with two players below: three of four, so 75%.
+    expect(betterThanPercent(2, 4)).toBe(75);
+    expect(betterThanPercent(0, 4)).toBe(25);
+    expect(betterThanPercent(3, 4)).toBe(100);
+    expect(betterThanPercent(0, 1)).toBe(100);
+    expect(betterThanPercent(1, 2)).toBe(100);
+    expect(betterThanPercent(2, 3)).toBe(100);
+    expect(betterThanPercent(0, 3)).toBe(33);
+    expect(betterThanPercent(0, 0)).toBe(0);
   });
 });
 
@@ -57,6 +62,10 @@ describe("cleanName", () => {
     expect(cleanName("<b>ada</b>")).toBeNull();
     expect(cleanName("Ada; drop table")).toBeNull();
     expect(cleanName("Anonymous!")).toBeNull();
+    expect(cleanName("José Ñandú")).toBe("José Ñandú");
+    expect(cleanName("Zoë")).toBe("Zoë");
+    expect(cleanName("ada 🔥")).toBeNull();
+    expect(cleanName("ada\u202eevil")).toBeNull();
     expect(cleanName("  ")).toBeNull();
     expect(cleanName("a".repeat(25))).toBeNull();
   });

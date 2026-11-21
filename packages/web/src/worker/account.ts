@@ -9,7 +9,7 @@ import {
   scoreKey,
 } from "../lib/account.js";
 import type { AccountStats, AccountView, FriendView, SyncResult } from "../lib/account.js";
-import { shiftDay } from "../lib/standings.js";
+import { cleanName, shiftDay } from "../lib/standings.js";
 import { calendarDay } from "../lib/storage.js";
 import type { ScoreEntry } from "../lib/storage.js";
 import {
@@ -31,10 +31,11 @@ import {
   removeFriendship,
   saveScores,
   scoresOf,
+  updateProfile,
   upsertUser,
 } from "./account-db.js";
 import type { UserRow } from "./account-db.js";
-import { allowHit } from "./board-db.js";
+import { allowHit, setPictureFor } from "./board-db.js";
 import {
   authorizeUrl,
   base64UrlToBytes,
@@ -231,7 +232,7 @@ function statsOf(user: UserRow, today: string): AccountStats {
 
 async function viewOf(user: UserRow, secret: string, today: string): Promise<AccountView> {
   return {
-    profile: { id: user.id, name: user.fullName || user.displayName, email: user.email, picture: user.picture, memberSince: user.createdAt },
+    profile: { id: user.id, username: user.displayName, name: user.fullName || user.displayName, showPicture: user.showPicture, email: user.email, picture: user.picture, memberSince: user.createdAt },
     stats: statsOf(user, today),
     invitePath: `/friend/${await inviteToken(secret, user)}`,
   };
@@ -314,6 +315,32 @@ export async function handleAccount(request: Request, deps: AccountDeps): Promis
     return reply(result, 200, request, auth);
   }
 
+  if (path === "/api/account/profile" && request.method === "POST") {
+    if (await limited(deps.sql, `user:${user.id}:profile:${Math.floor(now / HOUR_MS)}`, limits.friendPerHour, now, HOUR_MS)) {
+      return fail(429, "Too many changes. Try again later.");
+    }
+    const body = await readJson(request, 1024);
+    if (!body.ok) return fail(body.status, body.error);
+    const input = body.value && typeof body.value === "object" ? (body.value as { username?: unknown; showPicture?: unknown }) : {};
+    const change: { username?: string; showPicture?: boolean } = {};
+    if (input.username !== undefined) {
+      const username = typeof input.username === "string" ? cleanName(input.username) : null;
+      if (!username) return fail(400, "Use letters and numbers, up to 24 characters.");
+      change.username = username;
+    }
+    if (input.showPicture !== undefined) {
+      if (typeof input.showPicture !== "boolean") return fail(400, "That change was not understood.");
+      change.showPicture = input.showPicture;
+    }
+    if (change.username === undefined && change.showPicture === undefined) return fail(400, "That change was not understood.");
+    if (!(await updateProfile(deps.sql, user.id, change))) return fail(404, "Not found.");
+    // Hiding or showing the picture reaches the entries still on the leaderboard.
+    if (change.showPicture !== undefined) await setPictureFor(deps.sql, user.id, change.showPicture ? user.picture : null);
+    const fresh = await getUser(deps.sql, user.id);
+    if (!fresh) return fail(404, "Not found.");
+    return reply({ account: await viewOf(fresh, deps.secret, today) }, 200, request, auth);
+  }
+
   if (path === "/api/account/invite/reset" && request.method === "POST") {
     if (await limited(deps.sql, `user:${user.id}:friend:${Math.floor(now / HOUR_MS)}`, limits.friendPerHour, now, HOUR_MS)) {
       return fail(429, "Too many requests. Try again later.");
@@ -349,7 +376,7 @@ export async function handleAccount(request: Request, deps: AccountDeps): Promis
     const list: FriendView[] = friends.map((friend) => ({
       id: friend.id,
       name: friend.displayName,
-      picture: friend.picture,
+      picture: friend.showPicture ? friend.picture : null,
       stats: statsOf(friend, today),
       recent: recent.get(friend.id) ?? [],
     }));
@@ -367,7 +394,7 @@ export async function handleAccount(request: Request, deps: AccountDeps): Promis
     return reply(
       {
         name: owner.displayName,
-        picture: owner.picture,
+        picture: owner.showPicture ? owner.picture : null,
         self,
         friends: self ? false : await areFriends(deps.sql, user.id, owner.id),
       },
@@ -483,7 +510,7 @@ async function finishLogin(
       sub: identity.sub,
       email: identity.email,
       fullName: identity.fullName,
-      displayName: displayNameFrom(identity.givenName, identity.fullName),
+      displayName: cleanName(displayNameFrom(identity.givenName, identity.fullName)) ?? "Player",
       picture: identity.picture,
     },
     crypto.randomUUID(),
@@ -494,6 +521,14 @@ async function finishLogin(
   console.log(JSON.stringify({ event: "login", returning: user.createdAt < now }));
   const session = setCookie(cookieName(ACCOUNT_COOKIE, secure), token, { maxAge: Math.floor(SESSION_MS / 1000), secure });
   return redirect(state.r, [spent, session]);
+}
+
+/** The account signed in on this request, without renewing anything. Used by the leaderboard. */
+export async function accountFromRequest(request: Request, sql: Sql, now: number): Promise<UserRow | null> {
+  const token = cookieValue(request.headers.get("cookie"), cookieName(ACCOUNT_COOKIE, secureRequest(request)));
+  if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
+  const row = await getSession(sql, await sha256Hex(token), now);
+  return row ? row.user : null;
 }
 
 /** Housekeeping for the weekly job. */

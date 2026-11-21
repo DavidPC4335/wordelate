@@ -580,6 +580,11 @@ export function App() {
               snapshot={board}
               state={boardState}
               today={winReport?.ranked !== false}
+              onRefresh={() => {
+                void loadBoard().then((fresh) => {
+                  if (fresh) setBoard(fresh);
+                });
+              }}
               onName={
                 winReport?.ranked === false
                   ? undefined

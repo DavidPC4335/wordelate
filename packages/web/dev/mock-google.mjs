@@ -13,7 +13,7 @@ const { publicKey, privateKey } = generateKeyPairSync("rsa", { modulusLength: 20
 const jwk = { ...publicKey.export({ format: "jwk" }), kid: "mock-1", use: "sig", alg: "RS256" };
 
 const people = {
-  ada: { sub: "mock-ada", name: "Ada Lovelace", given_name: "Ada", email: "ada@example.com" },
+  ada: { sub: "mock-ada", name: "Ada Lovelace", given_name: "Ada", email: "ada@example.com", picture: "https://lh3.googleusercontent.com/a/mock-ada" },
   bob: { sub: "mock-bob", name: "Bob Barker", given_name: "Bob", email: "bob@example.com" },
   cy: { sub: "mock-cy", name: "Cy Young", given_name: "Cy", email: "cy@example.com" },
 };

@@ -9,6 +9,10 @@ export type ScoreRow = {
   moves: number;
   answer: BoardAnswer;
   name: string | null;
+  /** The account this entry was made under, when the player was signed in. */
+  userId: string | null;
+  /** A link to a profile picture. The image itself is never stored. */
+  picture: string | null;
   createdAt: number;
 };
 
@@ -19,6 +23,8 @@ type ScoreRecord = {
   moves: number;
   answer_json: string;
   name: string | null;
+  user_id: string | null;
+  picture: string | null;
   created_at: number;
 };
 
@@ -32,11 +38,13 @@ function rowFrom(record: ScoreRecord): ScoreRow | null {
     moves: record.moves,
     answer,
     name: record.name,
+    userId: record.user_id,
+    picture: record.picture,
     createdAt: record.created_at,
   };
 }
 
-const SCORE_COLUMNS = "player_id, puzzle_id, score, moves, answer_json, name, created_at";
+const SCORE_COLUMNS = "player_id, puzzle_id, score, moves, answer_json, name, user_id, picture, created_at";
 
 export async function getScore(sql: Sql, day: string, playerId: string): Promise<ScoreRow | null> {
   const record = await sql.get<ScoreRecord>(
@@ -137,6 +145,43 @@ export async function setName(sql: Sql, day: string, playerId: string, name: str
     [name, day, playerId],
   );
   return updated === 1;
+}
+
+/**
+ * Put a signed-in person's username (and picture link, if they allow it) on their entry,
+ * once, when it has no name yet. An entry already tied to someone else is left alone.
+ */
+export async function adoptAccount(
+  sql: Sql,
+  day: string,
+  playerId: string,
+  user: { id: string; name: string; picture: string | null },
+): Promise<boolean> {
+  const updated = await sql.run(
+    `UPDATE scores SET name = ?, user_id = ?, picture = ?
+     WHERE day = ? AND player_id = ? AND name IS NULL AND (user_id IS NULL OR user_id = ?)`,
+    [user.name, user.id, user.picture, day, playerId, user.id],
+  );
+  return updated === 1;
+}
+
+/** A signed-in person changes the name on their own entry. */
+export async function renameOwn(sql: Sql, day: string, playerId: string, userId: string, name: string): Promise<boolean> {
+  const updated = await sql.run(
+    `UPDATE scores SET name = ? WHERE day = ? AND player_id = ? AND user_id = ?`,
+    [name, day, playerId, userId],
+  );
+  return updated === 1;
+}
+
+/** Show or hide a person's picture link on every entry still on the board. */
+export async function setPictureFor(sql: Sql, userId: string, picture: string | null): Promise<void> {
+  await sql.run(`UPDATE scores SET picture = ? WHERE user_id = ?`, [picture, userId]);
+}
+
+/** When an account is deleted, its entries stay in the counts but lose the name, picture and link. */
+export async function forgetUser(sql: Sql, userId: string): Promise<void> {
+  await sql.run(`UPDATE scores SET user_id = NULL, picture = NULL, name = NULL WHERE user_id = ?`, [userId]);
 }
 
 /** True when this hit is still inside the limit. The counter always moves. */

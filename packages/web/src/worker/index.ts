@@ -4,7 +4,7 @@ import { decodePack } from "../lib/pack.js";
 import type { Pack } from "../lib/pack.js";
 import { mergePuzzles, puzzleForDay } from "../lib/puzzles.js";
 import { calendarDay } from "../lib/storage.js";
-import { handleAccount, isAccountPath } from "./account.js";
+import { accountFromRequest, handleAccount, isAccountPath } from "./account.js";
 import { archiveExpiredDays } from "./archive.js";
 import { backupAccounts } from "./backup.js";
 import { GOOGLE_ENDPOINTS } from "./google.js";
@@ -94,13 +94,18 @@ export default {
       }
     }
     const now = Date.now();
+    const sql = d1sql(env.DB);
     return handleBoard(request, {
-      sql: d1sql(env.DB),
+      sql,
       secret: env.LEADERBOARD_SECRET,
       now: () => now,
       pack,
       puzzle: (id) => catalog.get(id) ?? null,
       dailyPuzzleId: puzzleForDay(scheduled, calendarDay(new Date(now)))?.id ?? "",
+      account: async (incoming) => {
+        const user = await accountFromRequest(incoming, sql, now);
+        return user ? { id: user.id, name: user.displayName, picture: user.showPicture ? user.picture : null } : null;
+      },
     });
   },
   async scheduled(_controller, env, ctx): Promise<void> {

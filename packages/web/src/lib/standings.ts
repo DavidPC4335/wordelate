@@ -25,8 +25,10 @@ export type BoardEntry = {
   start: string;
   goal: string;
   steps: BoardStep[];
-  /** Share of today's players with a strictly lower score, as a whole percent. */
+  /** Share of the day's players this score beats, counting the player themself, as a whole percent. */
   betterThan: number;
+  /** Link to the player's profile picture, when they signed in and allow it. */
+  picture: string | null;
   /** Marker position on the bell, 1–99, with ties sharing the middle of their band. */
   place: number;
 };
@@ -40,6 +42,9 @@ export type BoardStanding = {
   nameEligible: boolean;
   named: boolean;
   displayName: string;
+  picture: string | null;
+  /** True when this entry belongs to the account that is signed in now, so its name can be changed. */
+  linked: boolean;
 };
 
 export type BoardSnapshot = {
@@ -133,10 +138,14 @@ export function dayInWindow(day: string, today: string): boolean {
   return isDayKey(day) && isDayKey(today) && day >= retentionStart(today) && day <= today;
 }
 
-/** Players strictly below this score, out of everyone who scored today. */
+/**
+ * The share of the day's players a score is better than, counting yourself:
+ * everyone strictly below you, plus you. Rank 2 of 4 is better than 75%.
+ */
 export function betterThanPercent(below: number, total: number): number {
-  if (total <= 0 || below <= 0) return 0;
-  return Math.floor((below * 100) / total);
+  if (total <= 0) return 0;
+  const beaten = Math.min(total, Math.max(0, below) + 1);
+  return Math.floor((beaten * 100) / total);
 }
 
 /** Where a score sits on the bell, including the middle of a tie. */
@@ -206,7 +215,8 @@ export function curveMarker(percent: number): { x: number; y: number } {
   return bellPoint(normalZ(share));
 }
 
-const NAME_RE = /^[A-Za-z0-9]+(?:[ .'-][A-Za-z0-9]+)*$/;
+/** Letters and numbers from any language, joined by single spaces, dots, apostrophes or hyphens. */
+const NAME_RE = /^[\p{L}\p{N}]+(?:[ .'-][\p{L}\p{N}]+)*$/u;
 
 /** A public name, or null when the text cannot be shown. */
 export function cleanName(raw: string): string | null {

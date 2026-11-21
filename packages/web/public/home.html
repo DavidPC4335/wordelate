@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#6d4df2" />
+    <title>Wordelate — A daily word puzzle</title>
+    <meta
+      name="description"
+      content="Wordelate is a free daily word puzzle. Add and subtract words to travel from a start word to a goal word. Optional Log in with Google saves your scores and lets you compare with friends."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://wordelate.com/home" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Wordelate" />
+    <meta property="og:title" content="Wordelate — A daily word puzzle" />
+    <meta property="og:description" content="Add and subtract words to travel from a start word to a goal word. A new puzzle every day." />
+    <meta property="og:url" content="https://wordelate.com/home" />
+    <meta property="og:image" content="https://wordelate.com/howto/step-1.png" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Wordelate",
+        "url": "https://wordelate.com/",
+        "description": "A free daily word puzzle where you add and subtract words to get from a start word to a goal word.",
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Any",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
+    <style>
+      :root {
+        --bg: #f4f1ff;
+        --surface: #fff;
+        --ink: #221d44;
+        --ink-soft: #625d8a;
+        --line: #e2dcf6;
+        --primary: #6d4df2;
+        --primary-deep: #4a30c2;
+        --primary-tint: #ece8ff;
+        --add: #16b377;
+        --add-deep: #0c8a5a;
+        --add-tint: #dcf7ec;
+        --sub: #ff5577;
+        --sub-deep: #d1304f;
+        --sub-tint: #ffe3ea;
+        --gold: #ffc233;
+        --display: "Fredoka", ui-rounded, "Avenir Next Rounded", "Nunito", system-ui, sans-serif;
+        --body: "Nunito", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--body);
+        font-size: 1.05rem;
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+      }
+      h1, h2, h3, p, ul, ol, dl, dd { margin: 0; }
+      ul, ol { padding: 0; list-style: none; }
+      a { color: var(--primary-deep); }
+      a:focus-visible, .btn:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+      .wrap { width: min(100% - 2rem, 62rem); margin-inline: auto; }
+
+      header.top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.8rem 0;
+      }
+      header.top img { display: block; height: 2.6rem; width: auto; }
+      nav.links { display: flex; align-items: center; gap: 1.1rem; font-weight: 800; font-size: 0.95rem; }
+      nav.links a { text-decoration: none; }
+      nav.links a:hover { text-decoration: underline; }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 3.2rem;
+        padding: 0.6rem 1.8rem;
+        border-radius: 999px;
+        background: var(--primary);
+        color: #fff;
+        font-family: var(--display);
+        font-size: 1.25rem;
+        font-weight: 600;
+        text-decoration: none;
+        box-shadow: 0 5px 0 var(--primary-deep);
+        transition: transform 0.12s, box-shadow 0.12s;
+      }
+      .btn:hover { transform: translateY(2px); box-shadow: 0 3px 0 var(--primary-deep); }
+      .btn:active { transform: translateY(5px); box-shadow: 0 0 0 var(--primary-deep); }
+      .btn-small { min-height: 2.6rem; padding: 0.4rem 1.2rem; font-size: 1rem; box-shadow: 0 4px 0 var(--primary-deep); }
+
+      .hero { display: grid; gap: 1.2rem; justify-items: center; padding: 2.5rem 0 3rem; text-align: center; }
+      .hero h1 { font-family: var(--display); font-size: clamp(2.2rem, 7vw, 3.6rem); font-weight: 700; line-height: 1.08; }
+      .hero .lead { max-width: 38rem; color: var(--ink-soft); font-size: 1.2rem; font-weight: 600; }
+      .hero .fine { color: var(--ink-soft); font-size: 0.9rem; font-weight: 700; }
+
+      .example {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 0.45rem;
+        padding: 0.9rem 1.2rem;
+        border: 2px solid var(--line);
+        border-radius: 22px;
+        background: var(--surface);
+        font-family: var(--display);
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+      .chip { padding: 0.15rem 0.8rem; border-radius: 999px; }
+      .chip-start { background: var(--primary-tint); color: var(--primary-deep); }
+      .chip-add { background: var(--add-tint); color: var(--add-deep); }
+      .chip-sub { background: var(--sub-tint); color: var(--sub-deep); }
+      .chip-goal { background: var(--add); color: #fff; }
+      .arrow { color: var(--ink-soft); }
+
+      section.block { display: grid; gap: 1rem; padding: 2rem 0; border-top: 2px solid var(--line); }
+      section.block h2 { font-family: var(--display); font-size: clamp(1.5rem, 4vw, 2rem); font-weight: 600; }
+      section.block > p { max-width: 46rem; color: var(--ink-soft); font-weight: 600; }
+
+      .grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+      .grid-4 { grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); }
+      .card { display: grid; align-content: start; gap: 0.4rem; padding: 1.1rem 1.2rem; border: 2px solid var(--line); border-radius: 20px; background: var(--surface); }
+      .card h3 { font-family: var(--display); font-size: 1.2rem; font-weight: 600; }
+      .card p { color: var(--ink-soft); font-size: 0.97rem; font-weight: 600; }
+      .step-no { display: inline-grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: var(--primary); color: #fff; font-family: var(--display); font-weight: 600; }
+
+      table { width: 100%; border-collapse: separate; border-spacing: 0; overflow: hidden; border: 2px solid var(--line); border-radius: 20px; background: var(--surface); font-size: 0.97rem; }
+      th, td { padding: 0.75rem 1rem; text-align: left; vertical-align: top; }
+      th { background: var(--primary-tint); color: var(--primary-deep); font-family: var(--display); font-weight: 600; }
+      tr + tr td { border-top: 1px solid var(--line); }
+      td:first-child { width: 28%; font-weight: 800; }
+      td { color: var(--ink-soft); font-weight: 600; }
+      .scroll { overflow-x: auto; }
+
+      .list { display: grid; gap: 0.5rem; padding-left: 1.2rem; list-style: disc; color: var(--ink-soft); font-weight: 600; max-width: 46rem; }
+      .list strong { color: var(--ink); }
+
+      .cta { display: grid; justify-items: center; gap: 0.9rem; margin: 1rem 0 2.5rem; padding: 2rem 1rem; border-radius: 28px; background: linear-gradient(135deg, var(--primary), #8b6cff); color: #fff; text-align: center; }
+      .cta h2 { font-family: var(--display); font-size: clamp(1.5rem, 4vw, 2rem); font-weight: 600; }
+      .cta .btn { background: #fff; color: var(--primary-deep); box-shadow: 0 5px 0 rgba(0, 0, 0, 0.18); }
+
+      footer { padding: 1.5rem 0 2.5rem; border-top: 2px solid var(--line); color: var(--ink-soft); font-size: 0.92rem; font-weight: 700; }
+      footer .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem 1.5rem; }
+      footer nav { display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="top">
+        <a href="/home" aria-label="Wordelate home"><img src="/brand/wordmark.png" alt="Wordelate" /></a>
+        <nav class="links" aria-label="Main">
+          <a href="#how">How it works</a>
+          <a href="#your-data">Your data</a>
+          <a href="/privacy-policy">Privacy policy</a>
+          <a class="btn btn-small" href="/">Play</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero" aria-labelledby="title">
+          <h1 id="title">Wordelate, a daily word puzzle</h1>
+          <p class="lead">
+            Travel from one word to another by adding and subtracting words. A new puzzle every day. The fewer moves you
+            use, the more points you earn.
+          </p>
+          <div class="example" role="img" aria-label="Example: mother, minus woman, plus man, plus child equals son">
+            <span class="chip chip-start">mother</span>
+            <span class="chip chip-sub">− woman</span>
+            <span class="chip chip-add">+ man</span>
+            <span class="chip chip-add">+ child</span>
+            <span class="arrow" aria-hidden="true">→</span>
+            <span class="chip chip-goal">son</span>
+          </div>
+          <a class="btn" href="/">Play today’s puzzle</a>
+          <p class="fine">Free. No account needed to play.</p>
+        </section>
+
+        <section class="block" id="how" aria-labelledby="how-title">
+          <h2 id="how-title">What Wordelate does</h2>
+          <p>
+            Wordelate is a free browser game. Every day there is one puzzle with a start word and a goal word. You add
+            or subtract words to land on the goal, and the game shows your path as a graph you can look around.
+          </p>
+          <div class="grid">
+            <div class="card">
+              <span class="step-no" aria-hidden="true">1</span>
+              <h3>Start from a word</h3>
+              <p>Each day’s puzzle gives you a start word and a goal word to reach.</p>
+            </div>
+            <div class="card">
+              <span class="step-no" aria-hidden="true">2</span>
+              <h3>Add and subtract words</h3>
+              <p>Type a word and add it or subtract it. Each move shifts your meaning toward, or away from, the goal.</p>
+            </div>
+            <div class="card">
+              <span class="step-no" aria-hidden="true">3</span>
+              <h3>Reach the goal</h3>
+              <p>Land on the goal word to win. Fewer moves score more points. You have up to 16 moves.</p>
+            </div>
+          </div>
+          <div class="grid grid-4">
+            <div class="card">
+              <h3>Points, streaks and rewards</h3>
+              <p>Earn points for each win, keep a daily streak going and unlock new looks as you play.</p>
+            </div>
+            <div class="card">
+              <h3>Daily leaderboard</h3>
+              <p>See how your score ranks against everyone who played today. Putting a name on the board is optional.</p>
+            </div>
+            <div class="card">
+              <h3>Past days and sharing</h3>
+              <p>Practice earlier puzzles without changing their boards, and share your result with friends.</p>
+            </div>
+            <div class="card">
+              <h3>Optional account</h3>
+              <p>Log in with Google to keep your scores and streak on every device and compare with friends by private link.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="block" id="your-data" aria-labelledby="data-title">
+          <h2 id="data-title">Why Wordelate asks for your data</h2>
+          <p>
+            You can play without logging in or sharing anything. If you choose “Log in with Google”, Wordelate asks
+            Google for only your basic profile: the <strong>openid</strong>, <strong>email</strong> and
+            <strong>profile</strong> scopes. Wordelate does not ask for access to your Gmail, Drive, contacts, calendar
+            or any other Google service.
+          </p>
+          <div class="scroll">
+            <table>
+              <thead>
+                <tr><th scope="col">What we receive</th><th scope="col">What we use it for</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Google account ID</td>
+                  <td>To recognize you when you come back, so your account is tied to you and not to a device.</td>
+                </tr>
+                <tr>
+                  <td>Email address</td>
+                  <td>To identify your account. It is shown only to you on your account page, never to other players or friends.</td>
+                </tr>
+                <tr>
+                  <td>Name</td>
+                  <td>To set your first username. You can change your username at any time. Friends and leaderboards see your username, not your full name.</td>
+                </tr>
+                <tr>
+                  <td>Profile picture address</td>
+                  <td>
+                    To show your picture next to your name on the leaderboard and to friends. We keep only the web
+                    address, never the image, and you can turn the picture off at any time.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ul class="list">
+            <li><strong>Why log in at all:</strong> to save your scores and streak to your account, sync them across devices, and compare with friends who share a private link with you.</li>
+            <li><strong>Your game data</strong> (scores, points, streaks, friend connections) is stored with your account for those same features, and backed up weekly.</li>
+            <li><strong>You are in control:</strong> log out, log out everywhere, or delete your account and its saved scores from your account page.</li>
+            <li>
+              Wordelate’s use and transfer of information received from Google APIs adheres to the
+              <a href="https://developers.google.com/terms/api-services-user-data-policy#limited-use" rel="noopener">Google API Services User Data Policy</a>,
+              including the Limited Use requirements.
+            </li>
+          </ul>
+          <p>Full details are in our <a href="/privacy-policy">privacy policy</a>.</p>
+        </section>
+
+        <div class="cta">
+          <h2>Ready for today’s puzzle?</h2>
+          <a class="btn" href="/">Play Wordelate</a>
+        </div>
+      </main>
+    </div>
+
+    <footer>
+      <div class="wrap">
+        <span>© Wordelate · <a href="https://wordelate.com/">wordelate.com</a></span>
+        <nav aria-label="Footer">
+          <a href="/">Play</a>
+          <a href="/privacy-policy">Privacy policy</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>
