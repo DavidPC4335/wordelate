@@ -4,7 +4,11 @@ import { decodePack } from "../lib/pack.js";
 import type { Pack } from "../lib/pack.js";
 import { mergePuzzles, puzzleForDay } from "../lib/puzzles.js";
 import { calendarDay } from "../lib/storage.js";
+import { handleAccount, isAccountPath } from "./account.js";
 import { archiveExpiredDays } from "./archive.js";
+import { backupAccounts } from "./backup.js";
+import { GOOGLE_ENDPOINTS } from "./google.js";
+import type { GoogleConfig } from "./google.js";
 import { handleBoard } from "./handle.js";
 import type { Sql } from "./sql.js";
 
@@ -39,6 +43,22 @@ function r2archive(bucket: R2Bucket): { put(key: string, body: string): Promise<
   };
 }
 
+/** The public half of the Google client. The secret half is a Worker secret. */
+const GOOGLE_CLIENT_ID = "149960639425-l7m7foks7b17vl7a51qs8hsht10r31vc.apps.googleusercontent.com";
+const GOOGLE_REDIRECT_URI = "https://wordelate.com/auth/redirect";
+
+function googleConfig(env: Env): GoogleConfig {
+  return {
+    clientId: env.GOOGLE_CLIENT_ID ?? GOOGLE_CLIENT_ID,
+    clientSecret: env.GOOGLE_CLIENT_SECRET ?? "",
+    redirectUri: env.GOOGLE_REDIRECT_URI ?? GOOGLE_REDIRECT_URI,
+    authUri: env.GOOGLE_AUTH_URI ?? GOOGLE_ENDPOINTS.authUri,
+    tokenUri: env.GOOGLE_TOKEN_URI ?? GOOGLE_ENDPOINTS.tokenUri,
+    jwksUri: env.GOOGLE_JWKS_URI ?? GOOGLE_ENDPOINTS.jwksUri,
+    issuers: env.GOOGLE_ISSUER ? [env.GOOGLE_ISSUER] : [...GOOGLE_ENDPOINTS.issuers],
+  };
+}
+
 function loadPack(assets: Fetcher, requestUrl: string): Promise<Pack> {
   if (!packPromise) {
     packPromise = (async () => {
@@ -56,6 +76,15 @@ function loadPack(assets: Fetcher, requestUrl: string): Promise<Pack> {
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
+    if (isAccountPath(url.pathname)) {
+      return handleAccount(request, {
+        sql: d1sql(env.DB),
+        secret: env.ACCOUNT_SECRET ?? "",
+        now: () => Date.now(),
+        google: googleConfig(env),
+        fetcher: (input, init) => fetch(input, init),
+      });
+    }
     let pack: Pack | null = null;
     if (url.pathname === "/api/score") {
       try {
@@ -84,6 +113,17 @@ export default {
         console.log(JSON.stringify({ event: "archive", day: today, archived: result.days }));
       })().catch((error: unknown) => {
         console.error(JSON.stringify({ event: "purge", message: error instanceof Error ? error.message : "failed" }));
+      }),
+    );
+    // Accounts are copied whole each week. This runs on its own so one failure cannot hide the other.
+    ctx.waitUntil(
+      (async () => {
+        const now = Date.now();
+        const today = calendarDay(new Date(now));
+        const result = await backupAccounts(sql, r2archive(env.ARCHIVE), today, now);
+        console.log(JSON.stringify({ event: "account-backup", day: today, ...result }));
+      })().catch((error: unknown) => {
+        console.error(JSON.stringify({ event: "account-backup", message: error instanceof Error ? error.message : "failed" }));
       }),
     );
   },

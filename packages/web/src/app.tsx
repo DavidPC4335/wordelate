@@ -19,6 +19,7 @@ import { TopBar } from "./components/top-bar.js";
 import { StandingsView } from "./components/standings-view.js";
 import { WinDialog } from "./components/win-dialog.js";
 import type { WinReport } from "./components/win-dialog.js";
+import { pushWin, useAccount } from "./lib/account-store.js";
 import { joinBoard, loadBoard, submitName, submitScore } from "./lib/board-api.js";
 import { recentDays } from "./lib/standings.js";
 import type { BoardSnapshot } from "./lib/standings.js";
@@ -132,6 +133,7 @@ export function App() {
   const [formKey, setFormKey] = useState(0);
   const [scoreLog, setScoreLog] = useState<ScoreEntry[]>(() => readScores());
   const [streakState, setStreakState] = useState<StreakState>(() => readStreak());
+  const account = useAccount();
   const scanGeneration = useRef(0);
   const shownProgress = useRef(0);
   const graphShot = useRef<(() => GraphShot | null) | null>(null);
@@ -139,6 +141,14 @@ export function App() {
   // A board that was already won when it was opened never scores again.
   const armedPuzzle = useRef<string | null>(null);
   const boardGeneration = useRef(0);
+
+  // A sync can add scores this device did not have. Read them back so the points and streak match.
+  useEffect(() => {
+    if (account.localVersion === 0) return;
+    setScoreLog(readScores());
+    setStreakState(readStreak());
+    setRewards(initialRewards());
+  }, [account.localVersion]);
 
   useEffect(() => {
     getPlayerId();
@@ -297,6 +307,8 @@ export function App() {
     if (recorded) {
       setScoreLog(recorded.scores);
       setStreakState(recorded.streak);
+      // Save the new win to the account right away. This does nothing when signed out.
+      void pushWin({ puzzleId: puzzle.id, moves: movesUsed, score: recorded.earned, day: todayKey });
     }
     const scores = recorded?.scores ?? scoreLog;
     const streak = recorded?.streak ?? streakState;

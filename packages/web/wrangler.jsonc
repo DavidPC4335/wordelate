@@ -12,9 +12,9 @@
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/auth/*"]
   },
-  "secrets": { "required": ["LEADERBOARD_SECRET"] },
+  "secrets": { "required": ["LEADERBOARD_SECRET", "ACCOUNT_SECRET", "GOOGLE_CLIENT_SECRET"] },
   "triggers": {
     // Sunday 05:15 UTC is 00:15 Eastern standard time and 01:15 Eastern daylight time.
     "crons": ["15 5 * * SUN"]

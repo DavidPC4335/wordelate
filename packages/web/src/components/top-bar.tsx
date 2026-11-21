@@ -1,3 +1,4 @@
+import { AccountButton } from "./account-popover.js";
 import { ArrowIcon, BoardIcon, FlameIcon, HelpIcon, StarIcon } from "./icons.js";
 
 /** The question. Always in the header so the player never loses track of the goal. */
@@ -59,6 +60,7 @@ export function TopBar({
         <button type="button" class="icon-btn" onClick={onHelp} aria-label="How to play" title="How to play">
           <HelpIcon size={20} />
         </button>
+        <AccountButton />
       </div>
     </header>
   );

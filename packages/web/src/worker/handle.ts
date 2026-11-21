@@ -14,6 +14,8 @@ import {
 import type { BoardSnapshot, BoardStep } from "../lib/standings.js";
 import { calendarDay } from "../lib/storage.js";
 import { allowHit, buckets, getScore, rankOf, saveBest, setName, topScores } from "./board-db.js";
+import { clientIp, fail, json, originAllowed, secureRequest } from "./http.js";
+import type { Failure } from "./http.js";
 import { issueSession, readCookie, readSession, sessionCookie } from "./session.js";
 import type { Sql } from "./sql.js";
 import { verifySolution } from "./verify.js";
@@ -46,45 +48,6 @@ export type BoardDeps = {
   dailyPuzzleId: string;
   limits?: BoardLimits;
 };
-
-type Failure = { ok: false; status: number; error: string };
-
-function json(body: unknown, status: number, headers?: Headers): Response {
-  const out = headers ?? new Headers();
-  out.set("content-type", "application/json; charset=utf-8");
-  out.set("x-content-type-options", "nosniff");
-  out.set("cache-control", "no-store");
-  return new Response(status === 204 ? null : JSON.stringify(body), { status, headers: out });
-}
-
-function fail(status: number, error: string): Response {
-  return json({ error }, status);
-}
-
-function originAllowed(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  if (!origin) return true;
-  let sent: URL;
-  try {
-    sent = new URL(origin);
-  } catch {
-    return false;
-  }
-  const target = new URL(request.url);
-  if (sent.origin === target.origin) return true;
-  const local = (host: string) => host === "localhost" || host === "127.0.0.1";
-  return local(sent.hostname) && local(target.hostname);
-}
-
-function clientIp(request: Request): string {
-  const header = request.headers.get("CF-Connecting-IP") ?? "";
-  if (/^[0-9a-fA-F:.]{3,64}$/.test(header)) return header;
-  return "unknown";
-}
-
-function secureRequest(request: Request): boolean {
-  return new URL(request.url).protocol === "https:";
-}
 
 async function readBody(request: Request): Promise<{ ok: true; value: unknown } | Failure> {
   const declared = Number(request.headers.get("content-length") ?? "0");

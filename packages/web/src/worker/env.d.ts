@@ -6,6 +6,14 @@ interface __BaseEnv_Env {
 	DB: D1Database;
 	ASSETS: Fetcher;
 	LEADERBOARD_SECRET: string;
+	ACCOUNT_SECRET?: string;
+	GOOGLE_CLIENT_SECRET?: string;
+	GOOGLE_CLIENT_ID?: string;
+	GOOGLE_REDIRECT_URI?: string;
+	GOOGLE_AUTH_URI?: string;
+	GOOGLE_TOKEN_URI?: string;
+	GOOGLE_JWKS_URI?: string;
+	GOOGLE_ISSUER?: string;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
