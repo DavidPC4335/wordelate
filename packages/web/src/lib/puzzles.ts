@@ -99,8 +99,8 @@ export function parsePuzzleFile(data: unknown): Puzzle[] {
   return puzzles;
 }
 
-/** A free pair from Admin. There is no authored solution to reveal. */
-export function customPuzzle(start: string, goal: string): Puzzle {
+/** A free pair from Admin. There is no authored solution to reveal. `similarity` is 0 to 1. */
+export function customPuzzle(start: string, goal: string, similarity = 0.75): Puzzle {
   const startWord = start.trim().toLowerCase();
   const goalWord = goal.trim().toLowerCase();
   return {
@@ -109,7 +109,7 @@ export function customPuzzle(start: string, goal: string): Puzzle {
     goal: goalWord,
     par: 0,
     solution: [],
-    solutionSimilarity: 0,
+    solutionSimilarity: similarity,
     here: goalWord,
     accepted: [],
   };

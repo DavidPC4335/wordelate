@@ -16,7 +16,6 @@ type Draft = {
   id: string;
   start: string;
   goal: string;
-  here: string;
   similarity: string;
   accepted: string;
   steps: { op: "+" | "-"; word: string }[];
@@ -27,7 +26,6 @@ const EMPTY: Draft = {
   id: "",
   start: "",
   goal: "",
-  here: "",
   similarity: "75",
   accepted: "",
   steps: [
@@ -79,7 +77,6 @@ function draftFrom(slot: QuestionSlot): Draft {
     id: slot.puzzle.id,
     start: slot.puzzle.start,
     goal: slot.puzzle.goal,
-    here: slot.puzzle.here,
     similarity: percentText(slot.puzzle.solutionSimilarity),
     accepted: slot.puzzle.accepted.join(", "),
     steps: slot.puzzle.solution.map((step) => ({ op: step.op, word: step.word })),
@@ -95,9 +92,8 @@ function puzzleFromDraft(draft: Draft): Puzzle | null {
   const id = draft.position === null ? autoId(draft.start, draft.goal) : draft.id.trim().toLowerCase();
   const start = draft.start.trim().toLowerCase();
   const goal = draft.goal.trim().toLowerCase();
-  const here = draft.here.trim().toLowerCase();
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) return null;
-  if (!/^[a-z]+$/.test(start) || !/^[a-z]+$/.test(goal) || !/^[a-z]+$/.test(here)) return null;
+  if (!/^[a-z]+$/.test(start) || !/^[a-z]+$/.test(goal)) return null;
   if (!Number.isFinite(percent) || percent < 0 || percent > 100) return null;
   if (accepted.length < 2 || accepted.length > 3 || accepted.some((word) => !/^[a-z]+$/.test(word))) return null;
   if (steps.length === 0 || steps.some((step) => !/^[a-z]+$/.test(step.word))) return null;
@@ -108,7 +104,7 @@ function puzzleFromDraft(draft: Draft): Puzzle | null {
     par: steps.length,
     solution: steps,
     solutionSimilarity: Math.round(percent * 100) / 10000,
-    here,
+    here: goal,
     accepted,
   };
 }
@@ -290,13 +286,10 @@ export function AdminPage() {
           <Field label="Start" hint="The word the player begins on.">
             <input class="field-input" value={draft.start} autoCapitalize="none" spellcheck={false} onInput={(event) => setDraft({ ...draft, start: event.currentTarget.value })} />
           </Field>
-          <Field label="Goal" hint="The word they are trying to reach.">
+          <Field label="Goal" hint="The word they are trying to reach. The sample solution is treated as landing on this word.">
             <input class="field-input" value={draft.goal} autoCapitalize="none" spellcheck={false} onInput={(event) => setDraft({ ...draft, goal: event.currentTarget.value })} />
           </Field>
-          <Field label="Lands on" hint="The vocabulary word the sample solution actually arrives at. Often the same as the goal.">
-            <input class="field-input" value={draft.here} autoCapitalize="none" spellcheck={false} onInput={(event) => setDraft({ ...draft, here: event.currentTarget.value })} />
-          </Field>
-          <Field label="Similarity" hint="How close that landing has to be, as a percent. 75% is the usual bar for a win.">
+          <Field label="Threshold" hint="How close that landing has to be, as a percent. 75% is the usual bar for a win.">
             <input
               class="field-input"
               inputMode="decimal"

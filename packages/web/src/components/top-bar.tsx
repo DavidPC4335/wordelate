@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "preact/hooks";
 import { AccountButton } from "./account-popover.js";
 import { ArrowIcon, BoardIcon, FlameIcon, HelpIcon, StarIcon } from "./icons.js";
 
@@ -32,7 +31,7 @@ export function TopBar({
   onBoard: () => void;
   onHelp: () => void;
   /** Present only for an account the server says is an admin. Starts a pair without saving a score. */
-  onPlayTest?: (start: string, goal: string) => string | null;
+  onPlayTest?: (start: string, goal: string, threshold: number) => string | null;
   /** Present only for an account the server says is an admin. Opens the admin page. */
   onAdmin?: () => void;
 }) {
@@ -67,116 +66,8 @@ export function TopBar({
         <button type="button" class="icon-btn" onClick={onHelp} aria-label="How to play" title="How to play">
           <HelpIcon size={20} />
         </button>
-        {onAdmin && onPlayTest ? <AdminMenu onPlayTest={onPlayTest} onOpen={onAdmin} /> : null}
-        <AccountButton />
+        <AccountButton onPlayTest={onPlayTest} onAdmin={onAdmin} />
       </div>
     </header>
-  );
-}
-
-/** Admin tools in the header. Hidden unless the server says this account is an admin. */
-function AdminMenu({
-  onPlayTest,
-  onOpen,
-}: {
-  onPlayTest: (start: string, goal: string) => string | null;
-  onOpen: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [start, setStart] = useState("");
-  const [goal, setGoal] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const box = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const away = (event: PointerEvent) => {
-      if (box.current && event.target instanceof Node && !box.current.contains(event.target)) setOpen(false);
-    };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", away);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("pointerdown", away);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [open]);
-
-  return (
-    <div class="admin-wrap" ref={box}>
-      <button
-        type="button"
-        class="admin-link"
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        onClick={() => setOpen((value) => !value)}
-      >
-        Admin
-      </button>
-      {open ? (
-        <div class="popover admin-pop" role="dialog" aria-label="Admin">
-          <form
-            class="admin-menu"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const message = onPlayTest(start, goal);
-              setError(message);
-              if (message === null) {
-                setStart("");
-                setGoal("");
-                setOpen(false);
-              }
-            }}
-          >
-            <h3 class="pop-title">Playtest</h3>
-            <p class="pop-text">Try any two words. Nothing is saved, and it stays off the board.</p>
-            <label class="field">
-              <span class="field-label">Start</span>
-              <input
-                class="field-input"
-                value={start}
-                autoCapitalize="none"
-                autoComplete="off"
-                spellcheck={false}
-                placeholder="paris"
-                onInput={(event) => setStart(event.currentTarget.value)}
-              />
-            </label>
-            <label class="field">
-              <span class="field-label">Goal</span>
-              <input
-                class="field-input"
-                value={goal}
-                autoCapitalize="none"
-                autoComplete="off"
-                spellcheck={false}
-                placeholder="sushi"
-                onInput={(event) => setGoal(event.currentTarget.value)}
-              />
-            </label>
-            <button type="submit" class="btn btn-small btn-go" disabled={start.trim() === "" || goal.trim() === ""}>
-              Play
-            </button>
-            {error ? (
-              <p class="move-error" role="alert">
-                {error}
-              </p>
-            ) : null}
-          </form>
-          <button
-            type="button"
-            class="btn btn-small btn-ghost"
-            onClick={() => {
-              setOpen(false);
-              onOpen();
-            }}
-          >
-            Open admin menu
-          </button>
-        </div>
-      ) : null}
-    </div>
   );
 }

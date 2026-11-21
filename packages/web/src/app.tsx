@@ -294,13 +294,14 @@ export function App() {
     played &&
       played.ok &&
       puzzle &&
-      countsAsWin({
+      (countsAsWin({
         similarity: played.similarity,
         hereWord: settledWord,
         goalWord: puzzle.goal,
         movesUsed: played.equationWords.length,
         acceptedWords: puzzle.accepted,
-      }),
+      }) ||
+        (practice && played.equationWords.length >= 1 && played.similarity >= puzzle.solutionSimilarity)),
   );
 
   useEffect(() => {
@@ -433,13 +434,14 @@ export function App() {
   }
 
   /** A free pair for an admin. It never writes a score, a streak, or saved progress. */
-  function playTest(startRaw: string, goalRaw: string): string | null {
+  function playTest(startRaw: string, goalRaw: string, threshold: number): string | null {
     if (!pack) return "Vocabulary is still loading.";
+    if (!Number.isFinite(threshold) || threshold < 0 || threshold > 100) return "Threshold must be from 0 to 100.";
     const start = closestWord(pack, startRaw);
     const goal = closestWord(pack, goalRaw);
     if (!start || !goal) return "Type a start word and a goal word from the vocabulary.";
     if (start === goal) return "Pick two different words.";
-    const made = customPuzzle(start, goal);
+    const made = customPuzzle(start, goal, Math.round(threshold * 100) / 10000);
     setPractice(true);
     setCustom(made);
     setArchiveDay(null);
