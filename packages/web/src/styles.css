@@ -1607,6 +1607,22 @@ button:focus-visible, input:focus-visible, summary:focus-visible, .dot:focus-vis
 .board-cheer .picture-toggle { justify-items: center; color: var(--ink); }
 .field-hint { color: var(--ink-soft); font-size: 0.82rem; font-weight: 600; line-height: 1.35; }
 .admin-id { margin: 0.15rem 0 0.8rem; }
+
+.save-q {
+  display: grid;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.9rem;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  background: #faf9ff;
+  text-align: left;
+}
+.save-q-title { margin: 0; font-family: var(--display); font-size: 1.1rem; }
+.save-q .field-input { font-size: 1rem; }
+.save-q select.field-input { padding-right: 0.5rem; }
+.save-q .btn { justify-self: start; }
+.save-q-done { margin: 0; font-weight: 800; color: var(--primary-deep); }
 .admin-people, .admin-stack, .admin-scores, .admin-audit, .admin-looks, .admin-steps { display: grid; gap: 0.35rem; }
 .admin-people li, .admin-scores li, .admin-steps li { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
 .admin-scores { max-height: 18rem; overflow: auto; padding-right: 0.2rem; }

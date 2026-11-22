@@ -16,6 +16,7 @@ import { RewardsDialog } from "./components/rewards-dialog.js";
 import { StatusBar } from "./components/status-bar.js";
 import { TopBar } from "./components/top-bar.js";
 import { StandingsView } from "./components/standings-view.js";
+import { SaveQuestion } from "./components/save-question.js";
 import { WinDialog } from "./components/win-dialog.js";
 import type { WinReport } from "./components/win-dialog.js";
 import { pushWin, useAccount } from "./lib/account-store.js";
@@ -522,6 +523,26 @@ export function App() {
 
   function layout(body: ComponentChildren) {
     const staff = account.account?.role === "admin" || account.account?.role === "super";
+    // A won playtest can become a real question. Only staff are ever offered this.
+    let saveQuestion: ComponentChildren = null;
+    if (staff && practice && puzzle && winReport && winReport.ranked === false) {
+      const used = appliedSteps(moves);
+      const skip = new Set([puzzle.start, puzzle.goal, ...used.map((step) => step.word)]);
+      const suggested = [hereWord ?? "", ...scanned]
+        .map((word) => word.trim().toLowerCase())
+        .filter((word, at, all) => /^[a-z]+$/.test(word) && !skip.has(word) && all.indexOf(word) === at)
+        .slice(0, 3);
+      saveQuestion = (
+        <SaveQuestion
+          key={`${puzzle.id}:${used.length}`}
+          start={puzzle.start}
+          goal={puzzle.goal}
+          steps={used}
+          threshold={puzzle.solutionSimilarity}
+          suggested={suggested}
+        />
+      );
+    }
     return (
       <div class="app">
         <TopBar
@@ -561,6 +582,7 @@ export function App() {
         <WinDialog
           open={winOpen}
           report={winReport}
+          extra={saveQuestion}
           board={
             <StandingsView
               snapshot={board}
@@ -687,6 +709,11 @@ export function App() {
           {practice ? (
             <p class="practice-banner">
               Playtest. Nothing is saved.
+              {won && winReport && (account.account?.role === "admin" || account.account?.role === "super") ? (
+                <button type="button" class="text-button" onClick={() => setWinOpen(true)}>
+                  Save as a question
+                </button>
+              ) : null}
               <button type="button" class="text-button" onClick={() => playDay(todayKey)}>
                 Back to today
               </button>

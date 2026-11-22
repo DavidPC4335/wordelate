@@ -19,7 +19,7 @@ import { adminRole, refreshStats, replaceScores, scoresOf, setUnlocks } from "./
 import type { UserRow } from "./account-db.js";
 import { allowHit } from "./board-db.js";
 import { fail, json, originAllowed, readJson } from "./http.js";
-import { ensureSchedule, publicStack, saveQuestion } from "./schedule.js";
+import { ensureSchedule, insertQuestion, publicStack, saveQuestion } from "./schedule.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 const WRITE_LIMIT = 40;
@@ -179,6 +179,15 @@ export async function handleAdmin(request: Request, deps: AccountDeps, seed: rea
     const position = input.position === undefined || input.position === null ? null : input.position;
     if (position !== null && (typeof position !== "number" || !Number.isInteger(position))) {
       return fail(400, "That day is not on the schedule.");
+    }
+    if (input.insert === true) {
+      if (position === null) return fail(400, "Pick the day for the new question.");
+      const placed = await insertQuestion(deps.sql, stack, position, puzzle, today, user.email, now);
+      if (!placed.ok) return fail(placed.status, placed.error);
+      const note = placed.moved > 0 ? `, ${placed.moved} later ${placed.moved === 1 ? "day" : "days"} moved back` : "";
+      await audit(deps, user, "question.insert", `${dayForPosition(placed.position)} ${puzzle.id}${note}`, now);
+      const fresh = await ensureSchedule(deps.sql, seed, now);
+      return json(await overview(deps, user, role, fresh, today), 200);
     }
     const saved = await saveQuestion(deps.sql, stack, position, puzzle, today, user.email, now);
     if (!saved.ok) return fail(saved.status, saved.error);

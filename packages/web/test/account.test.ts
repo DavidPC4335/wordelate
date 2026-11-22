@@ -40,6 +40,20 @@ function openSql(): { sql: Sql; db: DatabaseSync } {
     async run(statement, params) {
       return Number(db.prepare(statement).run(...(params as never[])).changes);
     },
+    async batch(statements) {
+      const changed: number[] = [];
+      db.exec("BEGIN");
+      try {
+        for (const item of statements) {
+          changed.push(Number(db.prepare(item.statement).run(...(item.params as never[])).changes));
+        }
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+      return changed;
+    },
   };
   return { sql, db };
 }
@@ -1043,6 +1057,47 @@ describe("admins", () => {
     const after = await appended.json();
     expect(after.questions).toHaveLength(seed.length + 1);
     expect(after.questions.at(-1)).toMatchObject({ locked: false, puzzle: { id: "extra-pair" } });
+  });
+
+  it("inserts a question on a future day and moves the rest back a day", async () => {
+    const h = harness();
+    const ada = await login(h, { sub: "ada", email: "ada@example.com" });
+    const boss = await login(h, { sub: "boss", email: "daviddev4335@gmail.com" });
+    const before = await (await getAdmin(h, boss.cookie)).json();
+    const ids = before.questions.map((slot: { puzzle: { id: string } }) => slot.puzzle.id);
+    const fresh = { ...seed[2], id: "playtest-find" };
+    const insert = (position: number | null, puzzle: unknown, cookie = boss.cookie) =>
+      postAdmin(h, "/api/admin/questions", { position, puzzle, insert: true }, cookie);
+
+    // Players learn nothing about it.
+    expect((await insert(3, fresh, ada.cookie)).status).toBe(404);
+    // Today and every earlier day are locked, and a missing day is refused.
+    expect((await insert(0, fresh)).status).toBe(409);
+    expect((await insert(null, fresh)).status).toBe(400);
+    expect((await insert(seed.length + 1, fresh)).status).toBe(400);
+    // An id another day already uses is refused.
+    expect((await insert(3, { ...fresh, id: ids[5] })).status).toBe(409);
+
+    const placed = await insert(3, fresh);
+    expect(placed.status).toBe(200);
+    const after = await placed.json();
+    const afterIds = after.questions.map((slot: { puzzle: { id: string } }) => slot.puzzle.id);
+    expect(afterIds).toHaveLength(ids.length + 1);
+    expect(afterIds.slice(0, 3)).toEqual(ids.slice(0, 3));
+    expect(afterIds[3]).toBe("playtest-find");
+    expect(afterIds.slice(4)).toEqual(ids.slice(3));
+    expect(after.questions[3].day).toBe("2026-11-23");
+    expect(after.audit[0]).toMatchObject({ action: "question.insert", detail: expect.stringContaining("playtest-find") });
+
+    // The public schedule still has only today, and a reload from the database agrees.
+    resetScheduleCache();
+    const reloaded = await (await getAdmin(h, boss.cookie)).json();
+    expect(reloaded.questions.map((slot: { puzzle: { id: string } }) => slot.puzzle.id)).toEqual(afterIds);
+
+    // The very end of the list moves nothing.
+    const end = await insert(afterIds.length, { ...fresh, id: "playtest-last" });
+    expect(end.status).toBe(200);
+    expect((await end.json()).questions.at(-1).puzzle.id).toBe("playtest-last");
   });
 
   it("lets only the superadmin edit the admin list", async () => {

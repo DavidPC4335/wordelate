@@ -58,6 +58,18 @@ function openSql(): Sql {
     async run(statement, params) {
       return Number(db.prepare(statement).run(...params).changes);
     },
+    async batch(statements) {
+      const changed: number[] = [];
+      db.exec("BEGIN");
+      try {
+        for (const item of statements) changed.push(Number(db.prepare(item.statement).run(...item.params).changes));
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+      return changed;
+    },
   };
 }
 

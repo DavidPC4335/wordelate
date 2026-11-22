@@ -51,12 +51,15 @@ export function WinDialog({
   open,
   report,
   board,
+  extra,
   onShare,
   onClose,
 }: {
   open: boolean;
   report: WinReport | null;
   board: ComponentChildren;
+  /** Anything else for this win, such as an admin's "save as a question". */
+  extra?: ComponentChildren;
   onShare: () => void;
   onClose: () => void;
 }) {
@@ -68,6 +71,7 @@ export function WinDialog({
           report={report}
           shown={shown}
           board={board}
+          extra={extra}
           onShare={onShare}
           onClose={onClose}
         />
@@ -80,12 +84,14 @@ function WinBody({
   report,
   shown,
   board,
+  extra,
   onShare,
   onClose,
 }: {
   report: WinReport;
   shown: number;
   board: ComponentChildren;
+  extra?: ComponentChildren;
   onShare: () => void;
   onClose: () => void;
 }) {
@@ -119,6 +125,8 @@ function WinBody({
       )}
 
       {board}
+
+      {extra}
 
       <ul class="win-stats">
         <li>

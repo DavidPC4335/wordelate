@@ -8,6 +8,7 @@ import type { CosmeticId } from "../lib/rewards.js";
 import { scoreForMoves } from "../lib/storage.js";
 import type { ScoreEntry } from "../lib/storage.js";
 import { adoptAccountScores, adoptUnlocks } from "../lib/account-store.js";
+import { autoId, shortDay } from "../lib/admin-format.js";
 import { GoogleButton } from "./account-bits.js";
 import { PageFrame } from "./account-page.js";
 
@@ -36,29 +37,8 @@ const EMPTY: Draft = {
 
 const PAGE_SIZE = 7;
 
-function wordId(word: string): string {
-  return word.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
-
-/** New questions take their id from the two words, so the field does not have to be typed. */
-function autoId(start: string, goal: string): string {
-  const left = wordId(start);
-  const right = wordId(goal);
-  if (!left || !right) return "";
-  return `${left}-${right}`;
-}
-
 function percentText(similarity: number): string {
   return String(Math.round(similarity * 10000) / 100);
-}
-
-function shortDay(day: string): string {
-  const [year, month, date] = day.split("-").map(Number);
-  return new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, date ?? 1)).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
 }
 
 function Field({ label, hint, children }: { label: string; hint: string; children: ComponentChildren }) {

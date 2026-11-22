@@ -128,6 +128,58 @@ export async function saveQuestion(
   return { ok: true, position: index, added: position === null };
 }
 
+/** Positions are parked this far out while the later days shift, so no two rows ever share one. */
+const PARK = 1_000_000;
+
+export type InsertResult =
+  | { ok: true; position: number; moved: number }
+  | { ok: false; status: number; error: string };
+
+/**
+ * Put a new question on a future day and move that day's question, and every one after it, back
+ * one day. Today and every earlier day stay exactly as they are. The shift and the insert are one
+ * transaction, so the stack never has a gap or a repeat.
+ */
+export async function insertQuestion(
+  sql: Sql,
+  stack: readonly Puzzle[],
+  position: number,
+  puzzle: Puzzle,
+  today: string,
+  actor: string,
+  now: number,
+): Promise<InsertResult> {
+  const todayIndex = positionForDay(today) ?? -1;
+  if (!Number.isInteger(position) || position < 0 || position > stack.length) {
+    return { ok: false, status: 400, error: "That day is not on the schedule." };
+  }
+  if (position <= todayIndex) {
+    return { ok: false, status: 409, error: "Today's question is locked, and so is every day before it." };
+  }
+  if (stack.some((held) => held.id === puzzle.id)) {
+    return { ok: false, status: 409, error: "Another day already uses that id." };
+  }
+  const body = JSON.stringify(puzzle);
+  if (body.length > 8000) return { ok: false, status: 400, error: "That question is too large." };
+  const moved = stack.length - position;
+  try {
+    await sql.batch([
+      { statement: `UPDATE questions SET position = position + ? WHERE position >= ?`, params: [PARK, position] },
+      { statement: `UPDATE questions SET position = position - ? WHERE position >= ?`, params: [PARK - 1, PARK] },
+      {
+        statement: `INSERT INTO questions (position, puzzle_json, updated_at, updated_by) VALUES (?, ?, ?, ?)`,
+        params: [position, body, now, actor],
+      },
+      { statement: `UPDATE schedule_meta SET revision = revision + 1 WHERE id = 1`, params: [] },
+    ]);
+  } catch {
+    memory = null;
+    return { ok: false, status: 409, error: "The list changed while you were saving. Reload and try again." };
+  }
+  memory = null;
+  return { ok: true, position, moved };
+}
+
 export function slotDay(position: number): string {
   return dayForPosition(position);
 }

@@ -34,6 +34,11 @@ function d1sql(db: D1Database): Sql {
       const result = await db.prepare(statement).bind(...params).run();
       return result.meta.changes ?? 0;
     },
+    async batch(statements) {
+      // D1 runs a batch inside one transaction, so a failure rolls every statement back.
+      const results = await db.batch(statements.map((item) => db.prepare(item.statement).bind(...item.params)));
+      return results.map((result) => result.meta.changes ?? 0);
+    },
   };
 }
 

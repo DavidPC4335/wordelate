@@ -52,6 +52,9 @@ export const adminApi = {
   addAdmin: (email: string) => call<AdminOverview>("/api/admin/admins", { email }),
   removeAdmin: (email: string) => call<AdminOverview>("/api/admin/admins/remove", { email }),
   saveQuestion: (position: number | null, puzzle: Puzzle) => call<AdminOverview>("/api/admin/questions", { position, puzzle }),
+  /** Put a new question on that day. Its question and every later one move back a day. */
+  insertQuestion: (position: number, puzzle: Puzzle) =>
+    call<AdminOverview>("/api/admin/questions", { position, puzzle, insert: true }),
   saveAccount: (body: { scores?: readonly unknown[]; unlocks?: readonly string[] }) => call<AdminOverview>("/api/admin/account", body),
 };
 
