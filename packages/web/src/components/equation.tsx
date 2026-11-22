@@ -2,7 +2,16 @@ import { useEffect, useRef } from "preact/hooks";
 import type { AppliedStep } from "../lib/game.js";
 
 /** The player's sum as chips: green to add, pink to take away. Scrolls to the newest. */
-export function Equation({ start, steps }: { start: string; steps: readonly AppliedStep[] }) {
+export function Equation({
+  start,
+  steps,
+  hint = "Add or subtract a word to begin",
+}: {
+  start: string;
+  steps: readonly AppliedStep[];
+  /** Shown when there are no steps yet. Null hides it. */
+  hint?: string | null;
+}) {
   const ref = useRef<HTMLOListElement>(null);
   const count = steps.length;
 
@@ -25,7 +34,7 @@ export function Equation({ start, steps }: { start: string; steps: readonly Appl
           {step.word}
         </li>
       ))}
-      {count === 0 ? <li class="chip chip-hint">Add or subtract a word to begin</li> : null}
+      {count === 0 && hint ? <li class="chip chip-hint">{hint}</li> : null}
     </ol>
   );
 }

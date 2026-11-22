@@ -147,6 +147,36 @@ export async function setName(sql: Sql, day: string, playerId: string, name: str
   return updated === 1;
 }
 
+/** The leaderboard row this account already has for the day, if any. */
+export async function scoreForAccount(
+  sql: Sql,
+  day: string,
+  userId: string,
+): Promise<{ playerId: string } | null> {
+  const row = await sql.get<{ player_id: string }>(
+    `SELECT player_id FROM scores WHERE day = ? AND user_id = ? LIMIT 1`,
+    [day, userId],
+  );
+  return row ? { playerId: row.player_id } : null;
+}
+
+/**
+ * Remember which account made this entry, whether or not it is in the top.
+ * A second device can then be told the day is already finished. The picture is a link.
+ */
+export async function linkAccount(
+  sql: Sql,
+  day: string,
+  playerId: string,
+  user: { id: string; picture: string | null },
+): Promise<void> {
+  await sql.run(
+    `UPDATE scores SET user_id = ?, picture = ?
+     WHERE day = ? AND player_id = ? AND (user_id IS NULL OR user_id = ?)`,
+    [user.id, user.picture, day, playerId, user.id],
+  );
+}
+
 /**
  * Put a signed-in person's username (and picture link, if they allow it) on their entry,
  * once, when it has no name yet. An entry already tied to someone else is left alone.

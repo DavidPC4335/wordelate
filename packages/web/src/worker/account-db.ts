@@ -179,6 +179,16 @@ export async function deleteExpiredSessions(sql: Sql, now: number): Promise<void
 
 type AccountScoreRecord = { day: string; puzzle_id: string; score: number; moves: number };
 
+/** The account's score for one day, if it has one. The better score wins when a day has more than one. */
+export async function scoreOnDay(sql: Sql, userId: string, day: string): Promise<ScoreEntry | null> {
+  const row = await sql.get<AccountScoreRecord>(
+    `SELECT day, puzzle_id, score, moves FROM account_scores WHERE user_id = ? AND day = ? ORDER BY score DESC LIMIT 1`,
+    [userId, day],
+  );
+  if (!row) return null;
+  return { day: row.day, puzzleId: row.puzzle_id, score: Number(row.score), moves: Number(row.moves) };
+}
+
 export async function scoresOf(sql: Sql, userId: string): Promise<ScoreEntry[]> {
   const rows = await sql.all<AccountScoreRecord>(
     `SELECT day, puzzle_id, score, moves FROM account_scores WHERE user_id = ? ORDER BY day, puzzle_id`,

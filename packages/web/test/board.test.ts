@@ -220,6 +220,31 @@ describe("daily board", () => {
     expect(junk.status).toBe(400);
   });
 
+  it("refuses a second device after this account has finished today", async () => {
+    const { deps, sql } = harness();
+    const ada = { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "Ada", picture: null as string | null };
+    for (let i = 0; i < 5; i++) {
+      deps.account = async () => null;
+      const cookie = await session(deps, `203.0.113.${i + 1}`);
+      expect((await post(deps, "/api/score", shortPath, cookie, { "cf-connecting-ip": `203.0.113.${i + 1}` })).status).toBe(200);
+    }
+    deps.account = async () => ada;
+    const first = await session(deps, "203.0.113.20");
+    const posted = await post(deps, "/api/score", longPath, first, { "cf-connecting-ip": "203.0.113.20" });
+    expect(posted.status).toBe(200);
+    // Below the top, so it carries no public name, but it still belongs to the account.
+    const row = await sql.get<{ user_id: string; name: string | null }>(
+      "SELECT user_id, name FROM scores WHERE user_id = ?",
+      [ada.id],
+    );
+    expect(row).toMatchObject({ user_id: ada.id, name: null });
+    const second = await session(deps, "203.0.113.21");
+    const again = await post(deps, "/api/score", shortPath, second, { "cf-connecting-ip": "203.0.113.21" });
+    expect(again.status).toBe(409);
+    const count = await sql.get<{ n: number }>("SELECT COUNT(*) AS n FROM scores WHERE user_id = ?", [ada.id]);
+    expect(count?.n).toBe(1);
+  });
+
   it("replaces a lower score and drops the old bucket", async () => {
     const { deps, clock, sql } = harness();
     const cookie = await session(deps);
@@ -357,7 +382,7 @@ describe("leaderboard with an account", () => {
     deps.account = async () => ada;
     const cookie = await session(deps);
     const board = await snapshot(await post(deps, "/api/score", longPath, cookie));
-    expect(board.you).toMatchObject({ rank: 6, named: false, linked: false });
+    expect(board.you).toMatchObject({ rank: 6, named: false, linked: true });
   });
 
   it("falls back to asking when the username cannot be shown", async () => {
@@ -365,7 +390,7 @@ describe("leaderboard with an account", () => {
     deps.account = async () => ({ ...ada, name: "ada 🔥" });
     const cookie = await session(deps);
     const board = await snapshot(await post(deps, "/api/score", shortPath, cookie));
-    expect(board.you).toMatchObject({ named: false, nameEligible: true, linked: false });
+    expect(board.you).toMatchObject({ named: false, nameEligible: true, linked: true });
   });
 
   it("names an earlier anonymous score when the person signs in afterwards", async () => {

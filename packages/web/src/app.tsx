@@ -305,6 +305,30 @@ export function App() {
         (practice && played.equationWords.length >= 1 && played.similarity >= puzzle.solutionSimilarity)),
   );
 
+  /**
+   * Today's puzzle is finished once this account has a score for it, even on a device
+   * that never played the moves. A local win still uses its own path.
+   */
+  function solvedToday(): { moves: number; score: number } | null {
+    if (practice || archiveDay || !puzzle || !puzzles) return null;
+    const todayKey = calendarDay(new Date());
+    const scheduled = puzzleAt(puzzles, todayKey);
+    if (!scheduled || scheduled.id !== puzzle.id) return null;
+    const remote = account.account?.today;
+    if (remote && remote.puzzleId === puzzle.id) return { moves: remote.moves, score: remote.score };
+    let best: ScoreEntry | null = null;
+    for (const entry of scoreLog) {
+      if (entry.puzzleId !== puzzle.id || entry.day !== todayKey) continue;
+      if (!best || entry.score > best.score) best = entry;
+    }
+    return best ? { moves: best.moves, score: best.score } : null;
+  }
+
+  const solved = solvedToday();
+  // Hold today's puzzle until we know whether the account already finished it.
+  const checkingAccount = Boolean(puzzle && puzzles && !practice && !archiveDay && !solved && account.status === "loading" && puzzleAt(puzzles, calendarDay(new Date()))?.id === puzzle.id);
+  const held = Boolean(solved) && !won;
+
   useEffect(() => {
     if (!hydrated || !puzzle || !played || !played.ok || !won || gaveUp) return;
     if (armedPuzzle.current !== puzzle.id) return;
@@ -329,6 +353,11 @@ export function App() {
       setBoard(null);
       setBoardState("off");
       return;
+    }
+    // This account already finished today on another device. Do not score it again.
+    if (account.account?.today?.puzzleId === puzzle.id) {
+      const scheduled = puzzles ? puzzleAt(puzzles, todayKey) : null;
+      if (scheduled?.id === puzzle.id) return;
     }
     const todayPuzzle = puzzles ? puzzleAt(puzzles, todayKey) : null;
     const ranked = todayPuzzle != null && puzzle.id === todayPuzzle.id;
@@ -389,7 +418,16 @@ export function App() {
     } catch {
       // Vibration is a nicety. Some browsers refuse it.
     }
-  }, [archiveDay, gaveUp, hydrated, moves, played, practice, puzzle, puzzles, scoreLog, streakState, won]);
+  }, [account.account, archiveDay, gaveUp, hydrated, moves, played, practice, puzzle, puzzles, scoreLog, streakState, won]);
+
+  // A score from another device closes this one. Drop a half-played line so it cannot finish.
+  useEffect(() => {
+    if (!held) return;
+    if (moves.length === 0 && !gaveUp) return;
+    setMoves([]);
+    setGaveUp(false);
+    setRevealed(false);
+  }, [held, moves.length, gaveUp]);
 
   // Let the graph's own sparkle play for a moment before the results card opens.
   useEffect(() => {
@@ -451,6 +489,7 @@ export function App() {
   }
 
   function attempt(move: Move): boolean {
+    if (held || checkingAccount) return false;
     if (!pack || !puzzle || !played || !played.ok) return false;
     const start = rowFor(pack, puzzle.start);
     const goal = rowFor(pack, puzzle.goal);
@@ -726,27 +765,39 @@ export function App() {
               </button>
             </p>
           ) : null}
-          <Equation start={puzzle.start} steps={steps} />
-          <Meter key={`${puzzle.id}:${formKey}`} progress={progress} won={won} />
+          <Equation start={puzzle.start} steps={steps} hint={held ? null : undefined} />
+          <Meter key={`${puzzle.id}:${formKey}`} progress={held ? 1 : progress} won={won || held} />
           <StatusBar
-            movesUsed={played.movesUsed}
+            movesUsed={held && solved ? solved.moves : played.movesUsed}
             maxMoves={MAX_MOVES}
             par={puzzle.par > 0 ? puzzle.par : null}
-            worth={scoreForMoves(played.movesUsed + 1)}
+            worth={held && solved ? solved.score : scoreForMoves(played.movesUsed + 1)}
           />
-          <MoveForm
-            key={formKey}
-            error={moveError}
-            locked={locked}
-            busy={pendingHere && !won}
-            canUndo={played.equationWords.length > 0}
-            resolveWord={(word) => closestWord(packState.pack, word) ?? word}
-            onAdd={(word) => attempt({ op: "+", word })}
-            onSubtract={(word) => attempt({ op: "-", word })}
-            onUndo={() => {
-              attempt({ op: "undo" });
-            }}
-          />
+          {held && solved ? (
+            <p class="practice-banner">
+              You already solved this in {solved.moves} {solved.moves === 1 ? "move" : "moves"}.
+              <button type="button" class="text-button" onClick={() => setBoardOpen(true)}>
+                See the board
+              </button>
+            </p>
+          ) : checkingAccount ? (
+            <p class="practice-banner">Checking your account…</p>
+          ) : (
+            <MoveForm
+              key={formKey}
+              error={moveError}
+              locked={locked}
+              busy={pendingHere && !won}
+              canUndo={played.equationWords.length > 0}
+              resolveWord={(word) => closestWord(packState.pack, word) ?? word}
+              onAdd={(word) => attempt({ op: "+", word })}
+              onSubtract={(word) => attempt({ op: "-", word })}
+              onUndo={() => {
+                attempt({ op: "undo" });
+              }}
+            />
+          )}
+          {held || checkingAccount ? null : (
           <Result
             won={won}
             gaveUp={gaveUp}
@@ -761,7 +812,8 @@ export function App() {
             onShare={() => {
               openShare();
             }}
-            />
+          />
+          )}
         </div>
       </section>
     </>,

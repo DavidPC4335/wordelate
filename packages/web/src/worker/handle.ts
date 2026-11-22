@@ -13,7 +13,7 @@ import {
 } from "../lib/standings.js";
 import type { BoardSnapshot, BoardStep } from "../lib/standings.js";
 import { calendarDay } from "../lib/storage.js";
-import { adoptAccount, allowHit, buckets, getScore, rankOf, renameOwn, saveBest, setName, topScores } from "./board-db.js";
+import { adoptAccount, allowHit, buckets, getScore, linkAccount, rankOf, renameOwn, saveBest, scoreForAccount, setName, topScores } from "./board-db.js";
 import { clientIp, fail, json, originAllowed, secureRequest } from "./http.js";
 import type { Failure } from "./http.js";
 import { issueSession, readCookie, readSession, sessionCookie } from "./session.js";
@@ -153,6 +153,8 @@ async function snapshotFor(
  */
 async function nameFromAccount(deps: BoardDeps, day: string, playerId: string, account: BoardAccount | null): Promise<void> {
   if (!account) return;
+  // Every signed-in score remembers the account, so another device cannot post a second one.
+  await linkAccount(deps.sql, day, playerId, { id: account.id, picture: account.picture });
   const name = cleanName(account.name);
   if (!name) return;
   const row = await getScore(deps.sql, day, playerId);
@@ -212,6 +214,13 @@ export async function handleBoard(request: Request, deps: BoardDeps): Promise<Re
     if (!deps.pack) return fail(503, "The board is unavailable.");
     const verified = await verifySolution(deps.pack, puzzle, parsed.steps);
     if (!verified) return fail(400, "That solution does not score.");
+    const account = (await deps.account?.(request)) ?? null;
+    if (account) {
+      const owned = await scoreForAccount(deps.sql, today, account.id);
+      if (owned && owned.playerId !== session.playerId) {
+        return fail(409, "This account already finished today.");
+      }
+    }
     const saved = await saveBest(deps.sql, today, session.playerId, {
       puzzleId: puzzle.id,
       score: verified.score,
@@ -220,7 +229,6 @@ export async function handleBoard(request: Request, deps: BoardDeps): Promise<Re
       createdAt: now,
     });
     console.log(JSON.stringify({ event: "score", day: today, puzzleId: puzzle.id, score: verified.score, counted: saved.counted }));
-    const account = (await deps.account?.(request)) ?? null;
     await nameFromAccount(deps, today, session.playerId, account);
     const snapshot = await snapshotFor(
       deps.sql,

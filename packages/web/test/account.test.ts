@@ -545,6 +545,8 @@ describe("sync", () => {
     const again = await (await post(h, "/api/account/sync", { scores: [entry("2026-11-18", "a-b", 3), entry("2026-11-20", "e-f", 1)] }, cookie)).json();
     expect(again.scores).toHaveLength(3);
     expect(again.stats).toMatchObject({ totalPoints: 130 + 140 + 150, wins: 3, streak: 3 });
+    const me = await (await get(h, "/api/account/me", cookie)).json();
+    expect(me.account.today).toEqual({ day: "2026-11-20", puzzleId: "e-f", moves: 1, score: 150 });
 
     const better = await (await post(h, "/api/account/sync", { scores: [entry("2026-11-18", "a-b", 1)] }, cookie)).json();
     expect(better.scores.find((s: ScoreEntry) => s.day === "2026-11-18")).toMatchObject({ moves: 1, score: 150 });

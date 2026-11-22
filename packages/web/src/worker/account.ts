@@ -31,6 +31,7 @@ import {
   refreshStats,
   removeFriendship,
   saveScores,
+  scoreOnDay,
   scoresOf,
   updateProfile,
   upsertUser,
@@ -238,6 +239,7 @@ async function viewOf(user: UserRow, secret: string, today: string, sql: Sql): P
     invitePath: `/friend/${await inviteToken(secret, user)}`,
     role: await adminRole(sql, user.email),
     unlocks: user.unlocks,
+    today: await scoreOnDay(sql, user.id, today),
   };
 }
 

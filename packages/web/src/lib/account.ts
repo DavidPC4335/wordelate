@@ -45,6 +45,8 @@ export type AccountView = {
   role: "player" | "admin" | "super";
   /** Set when an admin has chosen this account's looks. Null means they are earned. */
   unlocks: CosmeticId[] | null;
+  /** Today's finished puzzle, when this account already has one. Other devices use it to stay locked. */
+  today: { puzzleId: string; moves: number; score: number } | null;
 };
 
 export type FriendDay = { day: string; score: number; moves: number };
