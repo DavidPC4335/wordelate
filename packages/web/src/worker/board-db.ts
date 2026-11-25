@@ -153,11 +153,39 @@ export async function scoreForAccount(
   day: string,
   userId: string,
 ): Promise<{ playerId: string } | null> {
-  const row = await sql.get<{ player_id: string }>(
-    `SELECT player_id FROM scores WHERE day = ? AND user_id = ? LIMIT 1`,
+  const row = await getScoreForUser(sql, day, userId);
+  return row ? { playerId: row.playerId } : null;
+}
+
+/** This account's score for the day, including the answer. The better score wins if more than one was stored. */
+export async function getScoreForUser(sql: Sql, day: string, userId: string): Promise<ScoreRow | null> {
+  const record = await sql.get<ScoreRecord>(
+    `SELECT ${SCORE_COLUMNS} FROM scores
+     WHERE day = ? AND user_id = ?
+     ORDER BY score DESC, created_at ASC
+     LIMIT 1`,
     [day, userId],
   );
-  return row ? { playerId: row.player_id } : null;
+  return record ? rowFrom(record) : null;
+}
+
+/**
+ * Remember which account made this browser's scores, including days already played.
+ * A later visit from another device can then show those answers. A row that already
+ * belongs to someone else is left alone. The picture is a link.
+ */
+export async function claimScores(
+  sql: Sql,
+  playerId: string,
+  fromDay: string,
+  toDay: string,
+  user: { id: string; picture: string | null },
+): Promise<void> {
+  await sql.run(
+    `UPDATE scores SET user_id = ?, picture = ?
+     WHERE player_id = ? AND day >= ? AND day <= ? AND (user_id IS NULL OR user_id = ?)`,
+    [user.id, user.picture, playerId, fromDay, toDay, user.id],
+  );
 }
 
 /**

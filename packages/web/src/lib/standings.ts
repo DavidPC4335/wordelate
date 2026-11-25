@@ -45,6 +45,11 @@ export type BoardStanding = {
   picture: string | null;
   /** True when this entry belongs to the account that is signed in now, so its name can be changed. */
   linked: boolean;
+  /** The solution this player posted, so it can be shown even outside the top scores. */
+  answer: string;
+  start: string;
+  goal: string;
+  steps: BoardStep[];
 };
 
 export type BoardSnapshot = {

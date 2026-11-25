@@ -10,10 +10,12 @@ import {
   dayInWindow,
   formatBoardAnswer,
   formatPuzzle,
+  retentionStart,
 } from "../lib/standings.js";
 import type { BoardSnapshot, BoardStep } from "../lib/standings.js";
 import { calendarDay } from "../lib/storage.js";
-import { adoptAccount, allowHit, buckets, getScore, linkAccount, rankOf, renameOwn, saveBest, scoreForAccount, setName, topScores } from "./board-db.js";
+import { adoptAccount, allowHit, buckets, claimScores, getScore, getScoreForUser, linkAccount, rankOf, renameOwn, saveBest, scoreForAccount, setName, topScores } from "./board-db.js";
+import type { ScoreRow } from "./board-db.js";
 import { clientIp, fail, json, originAllowed, secureRequest } from "./http.js";
 import type { Failure } from "./http.js";
 import { issueSession, readCookie, readSession, sessionCookie } from "./session.js";
@@ -123,28 +125,51 @@ async function snapshotFor(
       picture: row.picture,
     };
   });
+  const row = await standingRow(sql, day, playerId, accountId);
   let you: BoardSnapshot["you"] = null;
-  if (playerId) {
-    const row = await getScore(sql, day, playerId);
-    if (row) {
-      const rank = await rankOf(sql, day, row.score, row.createdAt);
-      const below = belowCount(counts, row.score);
-      const tied = counts.find((bucket) => bucket.score === row.score)?.n ?? 0;
-      you = {
-        score: row.score,
-        rank,
-        total,
-        betterThan: betterThanPercent(below, total),
-        place: curvePlace(below, tied, total),
-        nameEligible: rank <= TOP_SIZE && row.name == null,
-        named: row.name != null,
-        displayName: row.name ?? ANONYMOUS,
-        picture: row.picture,
-        linked: accountId !== null && row.userId === accountId,
-      };
-    }
+  if (row) {
+    const rank = await rankOf(sql, day, row.score, row.createdAt);
+    const below = belowCount(counts, row.score);
+    const tied = counts.find((bucket) => bucket.score === row.score)?.n ?? 0;
+    you = {
+      score: row.score,
+      rank,
+      total,
+      betterThan: betterThanPercent(below, total),
+      place: curvePlace(below, tied, total),
+      nameEligible: rank <= TOP_SIZE && row.name == null,
+      named: row.name != null,
+      displayName: row.name ?? ANONYMOUS,
+      picture: row.picture,
+      linked: accountId !== null && row.userId === accountId,
+      answer: formatBoardAnswer(row.answer),
+      start: row.answer.start,
+      goal: row.answer.goal,
+      steps: row.answer.steps,
+    };
   }
   return { day, total, top, you, submitted };
+}
+
+/**
+ * The score that belongs to the person looking.
+ * This browser's row wins when it is unclaimed or already theirs. Otherwise a
+ * signed-in account is matched across browsers, and a row left on this browser
+ * by someone else stays visible but unlinked.
+ */
+async function standingRow(
+  sql: Sql,
+  day: string,
+  playerId: string | null,
+  accountId: string | null,
+): Promise<ScoreRow | null> {
+  const browser = playerId ? await getScore(sql, day, playerId) : null;
+  if (browser && (accountId === null || browser.userId === null || browser.userId === accountId)) return browser;
+  if (accountId) {
+    const owned = await getScoreForUser(sql, day, accountId);
+    if (owned) return owned;
+  }
+  return browser;
 }
 
 /**
@@ -189,6 +214,12 @@ export async function handleBoard(request: Request, deps: BoardDeps): Promise<Re
     if (!dayInWindow(requested, today)) return fail(404, "That day is not on the board.");
     const session = await readSession(deps.secret, readCookie(request.headers.get("cookie")) ?? "", now);
     const account = (await deps.account?.(request)) ?? null;
+    if (session && account) {
+      await claimScores(deps.sql, session.playerId, retentionStart(today), today, {
+        id: account.id,
+        picture: account.picture,
+      });
+    }
     if (session && requested === today) await nameFromAccount(deps, today, session.playerId, account);
     const snapshot = await snapshotFor(deps.sql, requested, session?.playerId ?? null, null, account?.id ?? null);
     return json(snapshot, 200);

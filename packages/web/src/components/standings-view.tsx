@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "preact/hooks";
 import { ANONYMOUS, TOP_SIZE, bellPoint, curveMarker } from "../lib/standings.js";
-import type { BoardEntry, BoardSnapshot } from "../lib/standings.js";
+import type { BoardEntry, BoardSnapshot, BoardStep } from "../lib/standings.js";
 import { Avatar } from "./account-bits.js";
 import { ArrowIcon, CheckIcon, StarIcon, TrophyIcon } from "./icons.js";
 import { PictureToggle } from "./profile-controls.js";
@@ -146,11 +146,40 @@ function YourStanding({
     );
   }
   const onBoard = you.rank <= TOP_SIZE;
+  const steps = Array.isArray(you.steps) ? you.steps : [];
   return (
     <>
       {onBoard ? <Cheer you={you} today={today} onName={onName} onRefresh={onRefresh} /> : null}
+      {steps.length > 0 ? <YourAnswer you={you} steps={steps} today={today} /> : null}
       {you.total > 1 ? <StandCard you={you} held={Boolean(snapshot.submitted && !snapshot.submitted.counted)} today={today} /> : null}
     </>
+  );
+}
+
+function AnswerPath({ start, steps, goal, label }: { start: string; steps: readonly BoardStep[]; goal: string; label: string }) {
+  const path = Array.isArray(steps) ? steps : [];
+  return (
+    <span class="board-path" aria-label={label}>
+      <span class="mini mini-start">{start}</span>
+      {path.map((step, stepIndex) => (
+        <span class={step.op === "+" ? "mini mini-add" : "mini mini-sub"} key={stepIndex}>
+          {step.op === "+" ? "+" : "−"} {step.word}
+        </span>
+      ))}
+      <span class="mini-arrow" aria-hidden="true">
+        <ArrowIcon size={14} />
+      </span>
+      <span class="mini mini-goal">{goal}</span>
+    </span>
+  );
+}
+
+function YourAnswer({ you, steps, today }: { you: You; steps: readonly BoardStep[]; today: boolean }) {
+  return (
+    <div class="board-mine">
+      <span class="stand-label">{today ? "Your answer" : "Your answer that day"}</span>
+      <AnswerPath start={you.start} steps={steps} goal={you.goal} label={you.answer} />
+    </div>
   );
 }
 
@@ -368,18 +397,7 @@ function Row({ entry, index, mine }: { entry: BoardEntry; index: number; mine: b
             {entry.score}
           </span>
         </span>
-        <span class="board-path" aria-label={entry.answer}>
-          <span class="mini mini-start">{entry.start}</span>
-          {entry.steps.map((step, stepIndex) => (
-            <span class={step.op === "+" ? "mini mini-add" : "mini mini-sub"} key={stepIndex}>
-              {step.op === "+" ? "+" : "−"} {step.word}
-            </span>
-          ))}
-          <span class="mini-arrow" aria-hidden="true">
-            <ArrowIcon size={14} />
-          </span>
-          <span class="mini mini-goal">{entry.goal}</span>
-        </span>
+        <AnswerPath start={entry.start} steps={entry.steps} goal={entry.goal} label={entry.answer} />
         <span class="board-meta">
           {entry.moves} {entry.moves === 1 ? "move" : "moves"} · ahead of {entry.betterThan}% of players
         </span>

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { Pack } from "../src/lib/pack.js";
 import type { Puzzle } from "../src/lib/puzzles.js";
 import type { BoardSnapshot } from "../src/lib/standings.js";
+import { calendarDay } from "../src/lib/storage.js";
 import { archiveExpiredDays, archiveKey } from "../src/worker/archive.js";
 import { handleBoard } from "../src/worker/handle.js";
 import type { BoardDeps, BoardLimits } from "../src/worker/handle.js";
@@ -432,6 +433,106 @@ describe("leaderboard with an account", () => {
     deps.account = async () => bob;
     const board = await leaderboard(deps, cookie);
     expect(board.you).toMatchObject({ named: false, linked: false });
+  });
+
+  it("shows a signed-in player's answer on a past day from another browser", async () => {
+    const { deps, clock } = harness();
+    deps.account = async () => ada;
+    const phone = await session(deps, "203.0.113.40");
+    await post(deps, "/api/score", longPath, phone, { "cf-connecting-ip": "203.0.113.40" });
+    for (let i = 0; i < 5; i++) {
+      deps.account = async () => null;
+      const cookie = await session(deps, `203.0.113.${50 + i}`);
+      await post(deps, "/api/score", shortPath, cookie, { "cf-connecting-ip": `203.0.113.${50 + i}` });
+    }
+    const played = calendarDay(new Date(clock.now));
+    clock.now += 86_400_000;
+
+    deps.account = async () => null;
+    const sameBrowser = await snapshot(
+      await handleBoard(
+        new Request(`http://127.0.0.1/api/leaderboard?day=${played}`, {
+          headers: { cookie: phone, "cf-connecting-ip": "203.0.113.40" },
+        }),
+        deps,
+      ),
+    );
+    expect(sameBrowser.you).toMatchObject({ rank: 6, answer: "alpha + hop + nudge", start: "alpha", goal: "omega" });
+
+    deps.account = async () => ada;
+    const laptop = await session(deps, "203.0.113.41");
+    const board = await snapshot(
+      await handleBoard(
+        new Request(`http://127.0.0.1/api/leaderboard?day=${played}`, {
+          headers: { cookie: laptop, "cf-connecting-ip": "203.0.113.41" },
+        }),
+        deps,
+      ),
+    );
+    expect(board.you).toMatchObject({
+      rank: 6,
+      linked: true,
+      score: 140,
+      answer: "alpha + hop + nudge",
+      start: "alpha",
+      goal: "omega",
+      steps: [
+        { op: "+", word: "hop" },
+        { op: "+", word: "nudge" },
+      ],
+    });
+    expect(board.top.some((entry) => entry.answer === "alpha + hop + nudge")).toBe(false);
+
+    deps.account = async () => bob;
+    const stranger = await snapshot(
+      await handleBoard(
+        new Request(`http://127.0.0.1/api/leaderboard?day=${played}`, {
+          headers: { cookie: laptop, "cf-connecting-ip": "203.0.113.41" },
+        }),
+        deps,
+      ),
+    );
+    expect(stranger.you).toBeNull();
+  });
+
+  it("keeps an earlier anonymous answer once the player signs in, on any browser", async () => {
+    const { deps, clock } = harness();
+    const phone = await session(deps, "203.0.113.70");
+    await post(deps, "/api/score", longPath, phone, { "cf-connecting-ip": "203.0.113.70" });
+    const played = calendarDay(new Date(clock.now));
+    clock.now += 86_400_000;
+
+    deps.account = async () => ada;
+    const claimed = await snapshot(
+      await handleBoard(
+        new Request("http://127.0.0.1/api/leaderboard", {
+          headers: { cookie: phone, "cf-connecting-ip": "203.0.113.70" },
+        }),
+        deps,
+      ),
+    );
+    expect(claimed.you).toBeNull();
+
+    const laptop = await session(deps, "203.0.113.71");
+    const board = await snapshot(
+      await handleBoard(
+        new Request(`http://127.0.0.1/api/leaderboard?day=${played}`, {
+          headers: { cookie: laptop, "cf-connecting-ip": "203.0.113.71" },
+        }),
+        deps,
+      ),
+    );
+    expect(board.you).toMatchObject({
+      linked: true,
+      score: 140,
+      answer: "alpha + hop + nudge",
+      start: "alpha",
+      goal: "omega",
+      steps: [
+        { op: "+", word: "hop" },
+        { op: "+", word: "nudge" },
+      ],
+    });
   });
 
   it("still asks an anonymous player once, and only once", async () => {

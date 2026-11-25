@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSignedEntry } from "../src/components/move-form.js";
+import { parseSignedEntry, prepareEntry } from "../src/components/move-form.js";
 import { closestWord } from "../src/lib/pack.js";
 import type { Pack } from "../src/lib/pack.js";
 
@@ -36,6 +36,37 @@ describe("parseSignedEntry", () => {
     expect(parseSignedEntry("-", "add")).toEqual({ op: "subtract", word: "" });
     expect(parseSignedEntry("−", "add")).toEqual({ op: "subtract", word: "" });
     expect(parseSignedEntry("   ", "add")).toEqual({ op: "add", word: "" });
+  });
+});
+
+describe("prepareEntry", () => {
+  const pack = packOf(["dog", "cat"]);
+  const resolve = (word: string) => {
+    const found = closestWord(pack, word);
+    return found ?? word;
+  };
+
+  it("submits an exact word on the first press", () => {
+    expect(prepareEntry("dog", "add", resolve)).toEqual({ action: "submit", op: "add", word: "dog" });
+    expect(prepareEntry("DOG", "subtract", resolve)).toEqual({ action: "submit", op: "subtract", word: "dog" });
+  });
+
+  it("holds a corrected spelling and keeps a typed sign", () => {
+    expect(prepareEntry("dag", "add", resolve)).toEqual({ action: "correct", value: "dog", from: "dag", to: "dog" });
+    expect(prepareEntry("+dag", "subtract", resolve)).toEqual({ action: "correct", value: "+dog", from: "dag", to: "dog" });
+    expect(prepareEntry("−cta", "add", resolve)).toEqual({ action: "correct", value: "−cat", from: "cta", to: "cat" });
+  });
+
+  it("submits the corrected word on the next press", () => {
+    const first = prepareEntry("dag", "subtract", resolve);
+    expect(first.action).toBe("correct");
+    if (first.action !== "correct") return;
+    expect(prepareEntry(first.value, "subtract", resolve)).toEqual({ action: "submit", op: "subtract", word: "dog" });
+  });
+
+  it("still submits an empty or unknown word so the form can report it", () => {
+    expect(prepareEntry("   ", "add", resolve)).toEqual({ action: "submit", op: "add", word: "" });
+    expect(prepareEntry("zzzzzzzzzz", "add", resolve)).toEqual({ action: "submit", op: "add", word: "zzzzzzzzzz" });
   });
 });
 

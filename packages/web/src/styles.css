@@ -649,6 +649,23 @@ button:focus-visible, input:focus-visible, summary:focus-visible, .dot:focus-vis
   color: var(--ink-soft);
 }
 
+.move-fix {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  background: var(--gold-tint);
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+.move-fix-from { text-decoration: line-through; }
+.move-fix-to { color: var(--gold-deep); font-family: var(--display); font-size: 0.95rem; font-weight: 600; }
+
 .move-error {
   padding: 0.4rem 0.8rem;
   border-radius: 12px;
@@ -1676,6 +1693,15 @@ button:focus-visible, input:focus-visible, summary:focus-visible, .dot:focus-vis
 .stand-rank strong { color: var(--primary-deep); }
 .stand-rank small { color: var(--ink-soft); font-size: 1rem; font-weight: 600; }
 .board-percent { font-family: var(--display); font-size: 1.2rem; font-weight: 700; color: var(--primary-deep); text-align: center; }
+.board-mine {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.75rem 0.9rem;
+  border: 2px solid #e1d8ff;
+  border-radius: 18px;
+  background: #fff;
+}
+.board-mine .board-path { padding-top: 0.1rem; }
 .curve { display: block; width: 100%; height: auto; }
 .curve-fill { fill: var(--primary-tint); stroke: none; }
 .curve-beat { fill: var(--primary); opacity: 0.3; stroke: none; animation: fade-in 0.8s ease 0.2s both; }

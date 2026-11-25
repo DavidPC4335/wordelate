@@ -107,7 +107,7 @@ export function BoardDialog({
           state={state}
           today={isToday}
           onRefresh={() => {
-            void loadBoard().then((fresh) => {
+            void loadBoard(selected).then((fresh) => {
               if (fresh) setSnapshot(fresh);
             });
           }}
