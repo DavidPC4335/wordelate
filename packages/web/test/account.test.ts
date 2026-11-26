@@ -1103,6 +1103,44 @@ describe("admins", () => {
     expect((await end.json()).questions.at(-1).puzzle.id).toBe("playtest-last");
   });
 
+  it("deletes a future question and moves the later days up", async () => {
+    const h = harness();
+    const ada = await login(h, { sub: "ada", email: "ada@example.com" });
+    const boss = await login(h, { sub: "boss", email: "daviddev4335@gmail.com" });
+    const before = await (await getAdmin(h, boss.cookie)).json();
+    const ids = before.questions.map((slot: { puzzle: { id: string } }) => slot.puzzle.id);
+    const remove = (position: unknown, cookie = boss.cookie) =>
+      postAdmin(h, "/api/admin/questions/remove", { position }, cookie);
+
+    expect((await remove(3, ada.cookie)).status).toBe(404);
+    expect((await remove(0)).status).toBe(409);
+    expect((await remove(seed.length)).status).toBe(400);
+    expect((await remove(1.5)).status).toBe(400);
+
+    const removed = await remove(3);
+    expect(removed.status).toBe(200);
+    const after = await removed.json();
+    const afterIds = after.questions.map((slot: { puzzle: { id: string } }) => slot.puzzle.id);
+    expect(afterIds).toHaveLength(ids.length - 1);
+    expect(afterIds.slice(0, 3)).toEqual(ids.slice(0, 3));
+    expect(afterIds.slice(3)).toEqual(ids.slice(4));
+    expect(after.questions[3].day).toBe("2026-11-23");
+    expect(after.questions[3].puzzle.id).toBe(ids[4]);
+    expect(after.audit[0]).toMatchObject({ action: "question.delete", detail: expect.stringContaining(ids[3]) });
+
+    resetScheduleCache();
+    const reloaded = await (await getAdmin(h, boss.cookie)).json();
+    expect(reloaded.questions.map((slot: { puzzle: { id: string } }) => slot.puzzle.id)).toEqual(afterIds);
+
+    const end = await remove(afterIds.length - 1);
+    expect(end.status).toBe(200);
+    const ended = await end.json();
+    expect(ended.questions).toHaveLength(afterIds.length - 1);
+    expect(ended.questions.at(-1).puzzle.id).toBe(afterIds.at(-2));
+    expect(ended.questions[0].puzzle.id).toBe(ids[0]);
+    expect(ended.questions[0].locked).toBe(true);
+  });
+
   it("lets only the superadmin edit the admin list", async () => {
     const h = harness();
     const boss = await login(h, { sub: "boss", email: "daviddev4335@gmail.com" });

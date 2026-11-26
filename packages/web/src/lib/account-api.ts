@@ -55,6 +55,8 @@ export const adminApi = {
   /** Put a new question on that day. Its question and every later one move back a day. */
   insertQuestion: (position: number, puzzle: Puzzle) =>
     call<AdminOverview>("/api/admin/questions", { position, puzzle, insert: true }),
+  /** Remove that day. Every later question moves up one day. */
+  removeQuestion: (position: number) => call<AdminOverview>("/api/admin/questions/remove", { position }),
   /** The top players over the last 7, 30 or 90 days. */
   topPlayers: (days: TopWindow) => call<TopPlayersView>(`/api/admin/top?days=${days}`),
   saveAccount: (body: { scores?: readonly unknown[]; unlocks?: readonly string[] }) => call<AdminOverview>("/api/admin/account", body),

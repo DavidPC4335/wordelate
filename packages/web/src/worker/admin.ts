@@ -20,7 +20,7 @@ import { adminRole, refreshStats, replaceScores, scoresOf, setUnlocks } from "./
 import type { UserRow } from "./account-db.js";
 import { allowHit } from "./board-db.js";
 import { fail, json, originAllowed, readJson } from "./http.js";
-import { ensureSchedule, insertQuestion, publicStack, saveQuestion } from "./schedule.js";
+import { deleteQuestion, ensureSchedule, insertQuestion, publicStack, saveQuestion } from "./schedule.js";
 import { topPlayers } from "./top-players.js";
 import type { ArchiveReader } from "./top-players.js";
 
@@ -194,6 +194,19 @@ export async function handleAdmin(
     if (removed !== 1) return fail(404, "That account is not an admin.");
     await audit(deps, user, "admin.remove", email, now);
     return json(await overview(deps, user, role, stack, today), 200);
+  }
+
+  if (path === "/api/admin/questions/remove") {
+    const position = input.position;
+    if (typeof position !== "number" || !Number.isInteger(position)) {
+      return fail(400, "That day is not on the schedule.");
+    }
+    const removed = await deleteQuestion(deps.sql, stack, position, today);
+    if (!removed.ok) return fail(removed.status, removed.error);
+    const note = removed.moved > 0 ? `, ${removed.moved} later ${removed.moved === 1 ? "day" : "days"} moved up` : "";
+    await audit(deps, user, "question.delete", `${dayForPosition(removed.position)} ${removed.id}${note}`, now);
+    const fresh = await ensureSchedule(deps.sql, seed, now);
+    return json(await overview(deps, user, role, fresh, today), 200);
   }
 
   if (path === "/api/admin/questions") {

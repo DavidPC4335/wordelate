@@ -1643,6 +1643,9 @@ button:focus-visible, input:focus-visible, summary:focus-visible, .dot:focus-vis
 .admin-people, .admin-stack, .admin-scores, .admin-audit, .admin-looks, .admin-steps { display: grid; gap: 0.35rem; }
 .admin-people li, .admin-scores li, .admin-steps li { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
 .admin-scores { max-height: 18rem; overflow: auto; padding-right: 0.2rem; }
+.admin-row { display: flex; align-items: center; gap: 0.45rem; }
+.admin-row .admin-slot { flex: 1; min-width: 0; }
+.admin-row .btn { flex: none; }
 .admin-pager { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin: 0.2rem 0 0.4rem; font-weight: 800; }
 .admin-page-count { color: var(--ink-soft); font-weight: 700; }
 .admin-slot {

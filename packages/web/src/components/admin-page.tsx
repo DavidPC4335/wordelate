@@ -97,6 +97,7 @@ export function AdminPage() {
   const [page, setPage] = useState(0);
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [busy, setBusy] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<number | null>(null);
   const [email, setEmail] = useState("");
   const [scores, setScores] = useState<ScoreEntry[]>([]);
   const [scoreDraft, setScoreDraft] = useState({ day: "", puzzleId: "", moves: "3" });
@@ -145,6 +146,19 @@ export function AdminPage() {
       setShowLocked(false);
       setPage(Math.max(0, Math.ceil(upcomingCount / PAGE_SIZE) - 1));
     }
+    setDraft(EMPTY);
+  }
+
+  async function removeQuestion(position: number) {
+    setBusy(true);
+    const reply = await adminApi.removeQuestion(position);
+    setBusy(false);
+    setPendingDelete(null);
+    if (!reply.ok) {
+      setError(reply.error);
+      return;
+    }
+    apply(reply.value);
     setDraft(EMPTY);
   }
 
@@ -207,7 +221,7 @@ export function AdminPage() {
         <p class="card-text">
           {showLocked
             ? "These days have already started, so their questions stay as they are."
-            : "Each question is one day, in order. Pick a day to change it, or add a new one at the end. Today cannot be changed."}
+            : "Each question is one day, in order. Pick a day to change it, add one at the end, or remove one. Later days move up, so there is no empty day. Today cannot be changed."}
         </p>
         <div class="admin-pager">
           <button type="button" class="btn btn-small btn-ghost" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}>
@@ -239,7 +253,7 @@ export function AdminPage() {
         {slice.length === 0 ? <p class="card-note">Nothing in this list.</p> : null}
         <ul class="admin-stack">
           {slice.map((slot) => (
-            <li key={slot.position}>
+            <li key={slot.position} class="admin-row">
               <button
                 type="button"
                 class={draft.position === slot.position ? "admin-slot admin-slot-on" : "admin-slot"}
@@ -247,6 +261,7 @@ export function AdminPage() {
                 aria-current={draft.position === slot.position ? "true" : undefined}
                 onClick={() => {
                   setDraft(draftFrom(slot));
+                  setPendingDelete(null);
                   setError(null);
                 }}
               >
@@ -256,6 +271,24 @@ export function AdminPage() {
                 </span>
                 {slot.locked ? <span class="admin-lock">Locked</span> : null}
               </button>
+              {!slot.locked && pendingDelete === slot.position ? (
+                <button type="button" class="btn btn-small btn-danger" disabled={busy} onClick={() => void removeQuestion(slot.position)}>
+                  Remove {shortDay(slot.day)}
+                </button>
+              ) : null}
+              {!slot.locked && pendingDelete !== slot.position ? (
+                <button
+                  type="button"
+                  class="text-button"
+                  disabled={busy}
+                  onClick={() => {
+                    setPendingDelete(slot.position);
+                    setError(null);
+                  }}
+                >
+                  Remove
+                </button>
+              ) : null}
             </li>
           ))}
         </ul>

@@ -180,6 +180,51 @@ export async function insertQuestion(
   return { ok: true, position, moved };
 }
 
+export type DeleteResult =
+  | { ok: true; position: number; moved: number; id: string }
+  | { ok: false; status: number; error: string };
+
+/**
+ * Take a future question off the list and move every later question up one day.
+ * Today and every earlier day stay exactly as they are. The delete and the shift are one
+ * transaction, so the stack never has a gap.
+ */
+export async function deleteQuestion(
+  sql: Sql,
+  stack: readonly Puzzle[],
+  position: number,
+  today: string,
+): Promise<DeleteResult> {
+  const todayIndex = positionForDay(today) ?? -1;
+  if (!Number.isInteger(position) || position < 0 || position >= stack.length) {
+    return { ok: false, status: 400, error: "That day is not on the schedule." };
+  }
+  if (position <= todayIndex) {
+    return { ok: false, status: 409, error: "Today's question is locked, and so is every day before it." };
+  }
+  const id = stack[position]?.id ?? "";
+  const moved = stack.length - position - 1;
+  try {
+    await sql.batch([
+      // A missing row makes this insert fail its position check, and the whole batch rolls back.
+      {
+        statement: `INSERT INTO questions (position, puzzle_json, updated_at, updated_by)
+                    SELECT -1, '{}', 0, 'x' WHERE NOT EXISTS (SELECT 1 FROM questions WHERE position = ?)`,
+        params: [position],
+      },
+      { statement: `DELETE FROM questions WHERE position = ?`, params: [position] },
+      { statement: `UPDATE questions SET position = position + ? WHERE position > ?`, params: [PARK, position] },
+      { statement: `UPDATE questions SET position = position - ? WHERE position >= ?`, params: [PARK + 1, PARK] },
+      { statement: `UPDATE schedule_meta SET revision = revision + 1 WHERE id = 1`, params: [] },
+    ]);
+  } catch {
+    memory = null;
+    return { ok: false, status: 409, error: "The list changed while you were saving. Reload and try again." };
+  }
+  memory = null;
+  return { ok: true, position, moved, id };
+}
+
 export function slotDay(position: number): string {
   return dayForPosition(position);
 }
