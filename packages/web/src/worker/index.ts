@@ -50,6 +50,15 @@ function r2archive(bucket: R2Bucket): { put(key: string, body: string): Promise<
   };
 }
 
+function r2reader(bucket: R2Bucket): { get(key: string): Promise<string | null> } {
+  return {
+    async get(key) {
+      const object = await bucket.get(key);
+      return object ? object.text() : null;
+    },
+  };
+}
+
 /** The public half of the Google client. The secret half is a Worker secret. */
 const GOOGLE_CLIENT_ID = "149960639425-l7m7foks7b17vl7a51qs8hsht10r31vc.apps.googleusercontent.com";
 const GOOGLE_REDIRECT_URI = "https://wordelate.com/auth/redirect";
@@ -102,7 +111,9 @@ export default {
       fetcher: (input: string, init?: RequestInit) => fetch(input, init),
     };
     if (url.pathname === "/api/schedule" && request.method === "GET") return handleSchedule(accountDeps, scheduled);
-    if (url.pathname === "/api/admin" || url.pathname.startsWith("/api/admin/")) return handleAdmin(request, accountDeps, scheduled);
+    if (url.pathname === "/api/admin" || url.pathname.startsWith("/api/admin/")) {
+      return handleAdmin(request, accountDeps, scheduled, r2reader(env.ARCHIVE));
+    }
     let pack: Pack | null = null;
     let dailyPuzzleId = puzzleAt(scheduled, calendarDay(new Date(now)))?.id ?? "";
     let puzzleLookup = (id: string) => catalog.get(id) ?? null;

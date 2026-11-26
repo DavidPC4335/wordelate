@@ -82,6 +82,7 @@ describe("routes", () => {
     const token = `${"0".repeat(8)}-0000-0000-0000-${"0".repeat(12)}.${"A".repeat(22)}`;
     expect(parseRoute("/account")).toEqual({ name: "account" });
     expect(parseRoute("/account/")).toEqual({ name: "account" });
+    expect(parseRoute("/admin/top")).toEqual({ name: "admin-top" });
     expect(parseRoute(`/friend/${token}`)).toEqual({ name: "friend", token });
     expect(parseRoute("/friend/nope")).toEqual({ name: "friend", token: "" });
     expect(parseRoute("/privacy-policy")).toEqual({ name: "privacy" });

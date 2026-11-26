@@ -7,6 +7,7 @@ import {
   isSuperadmin,
   normalizeEmail,
   positionForDay,
+  topWindowFrom,
 } from "../lib/admin.js";
 import type { AdminOverview, AdminPerson, AuditEntry, QuestionSlot } from "../lib/admin.js";
 import { parsePuzzleFile } from "../lib/puzzles.js";
@@ -20,10 +21,14 @@ import type { UserRow } from "./account-db.js";
 import { allowHit } from "./board-db.js";
 import { fail, json, originAllowed, readJson } from "./http.js";
 import { ensureSchedule, insertQuestion, publicStack, saveQuestion } from "./schedule.js";
+import { topPlayers } from "./top-players.js";
+import type { ArchiveReader } from "./top-players.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 const WRITE_LIMIT = 40;
 const AUDIT_LIMIT = 40;
+/** The top players page reads up to 90 archived days, so it has its own, looser limit. */
+const TOP_READ_LIMIT = 60;
 
 type Gate = { user: UserRow; role: "admin" | "super" } | Response;
 
@@ -120,7 +125,12 @@ export async function handleSchedule(deps: AccountDeps, seed: readonly Puzzle[])
   }
 }
 
-export async function handleAdmin(request: Request, deps: AccountDeps, seed: readonly Puzzle[]): Promise<Response> {
+export async function handleAdmin(
+  request: Request,
+  deps: AccountDeps,
+  seed: readonly Puzzle[],
+  archive: ArchiveReader | null = null,
+): Promise<Response> {
   const now = deps.now();
   const today = calendarDay(new Date(now));
   const url = new URL(request.url);
@@ -128,6 +138,19 @@ export async function handleAdmin(request: Request, deps: AccountDeps, seed: rea
   const opened = await gate(request, deps, now);
   if (isResponse(opened)) return opened;
   const { user, role } = opened;
+
+  if (path === "/api/admin/top" && request.method === "GET") {
+    const days = topWindowFrom(url.searchParams.get("days"));
+    if (!days) return fail(400, "Pick 7, 30 or 90 days.");
+    const allowed = await allowHit(deps.sql, `admin-top:${user.id}:${Math.floor(now / HOUR_MS)}`, TOP_READ_LIMIT, now, HOUR_MS);
+    if (!allowed) return fail(429, "Too many requests. Try again later.");
+    try {
+      return json(await topPlayers(deps.sql, archive, days, today), 200);
+    } catch (error) {
+      console.error(JSON.stringify({ event: "top-players", message: error instanceof Error ? error.message : "failed" }));
+      return fail(503, "The rankings are unavailable.");
+    }
+  }
 
   let stack: Puzzle[];
   try {

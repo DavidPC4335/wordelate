@@ -1,5 +1,5 @@
 import type { AccountView, FriendView, SyncResult } from "./account.js";
-import type { AdminOverview } from "./admin.js";
+import type { AdminOverview, TopPlayersView, TopWindow } from "./admin.js";
 import type { Puzzle } from "./puzzles.js";
 
 export type Reply<T> = { ok: true; value: T } | { ok: false; status: number; error: string };
@@ -55,6 +55,8 @@ export const adminApi = {
   /** Put a new question on that day. Its question and every later one move back a day. */
   insertQuestion: (position: number, puzzle: Puzzle) =>
     call<AdminOverview>("/api/admin/questions", { position, puzzle, insert: true }),
+  /** The top players over the last 7, 30 or 90 days. */
+  topPlayers: (days: TopWindow) => call<TopPlayersView>(`/api/admin/top?days=${days}`),
   saveAccount: (body: { scores?: readonly unknown[]; unlocks?: readonly string[] }) => call<AdminOverview>("/api/admin/account", body),
 };
 

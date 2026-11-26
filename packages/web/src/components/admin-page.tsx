@@ -9,7 +9,7 @@ import { scoreForMoves } from "../lib/storage.js";
 import type { ScoreEntry } from "../lib/storage.js";
 import { adoptAccountScores, adoptUnlocks } from "../lib/account-store.js";
 import { autoId, shortDay } from "../lib/admin-format.js";
-import { GoogleButton } from "./account-bits.js";
+import { AppLink, GoogleButton } from "./account-bits.js";
 import { PageFrame } from "./account-page.js";
 
 type Draft = {
@@ -196,6 +196,11 @@ export function AdminPage() {
         Signed in as {data.email}.{" "}
         {upcoming < 14 ? `Only ${Math.max(0, upcoming)} days of questions are left after today.` : `${upcoming} upcoming days are ready.`}
       </p>
+      <div class="card-actions">
+        <AppLink to="/admin/top" class="btn btn-small">
+          Top players
+        </AppLink>
+      </div>
 
       <section class="card" aria-labelledby="questions-title">
         <h2 class="card-title" id="questions-title">{showLocked ? "Locked days" : "Upcoming questions"}</h2>

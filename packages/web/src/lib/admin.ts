@@ -68,3 +68,42 @@ export type AdminOverview = {
   unlocks: CosmeticId[];
   audit: AuditEntry[];
 };
+
+/* ---------- Top players ---------- */
+
+/** The windows an admin can rank players over, in days. */
+export const TOP_WINDOWS = [7, 30, 90] as const;
+export type TopWindow = (typeof TOP_WINDOWS)[number];
+export const TOP_PLAYERS = 5;
+
+export function topWindowFrom(value: unknown): TopWindow | null {
+  const days = typeof value === "string" && /^\d{1,3}$/.test(value) ? Number(value) : value;
+  return TOP_WINDOWS.find((window) => window === days) ?? null;
+}
+
+/**
+ * One ranked player. Only what a card shows: no account id, email or full name.
+ * The picture is the same link the public leaderboard shows, and only when the person allows it.
+ */
+export type TopPlayer = {
+  place: number;
+  name: string;
+  picture: string | null;
+  totalPoints: number;
+  daysPlayed: number;
+  bestDay: {
+    day: string;
+    score: number;
+    moves: number;
+    start: string;
+    goal: string;
+    steps: { op: "+" | "-"; word: string }[];
+  };
+};
+
+export type TopPlayersView = {
+  days: TopWindow;
+  from: string;
+  to: string;
+  players: TopPlayer[];
+};

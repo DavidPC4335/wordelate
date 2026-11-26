@@ -2105,3 +2105,10 @@ button:focus-visible, input:focus-visible, summary:focus-visible, .dot:focus-vis
 .legal strong { color: var(--ink); }
 .legal a { color: var(--primary-deep); }
 .legal-meta { font-size: 0.86rem; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase; }
+
+/* Admin top players */
+.top-windows { display: flex; gap: 0.5rem; }
+.top-windows .day-pill { flex: 0 0 4.4rem; padding: 0.45rem 0.2rem; }
+.top-cards { display: grid; gap: 1.2rem; margin: 0; padding: 0; list-style: none; }
+.top-card { display: grid; justify-items: center; gap: 0.6rem; }
+.top-card img { width: min(100%, 27rem); height: auto; border-radius: 22px; box-shadow: 0 5px 0 var(--line); }

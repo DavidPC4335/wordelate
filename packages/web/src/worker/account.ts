@@ -96,7 +96,7 @@ export type AccountDeps = {
 };
 
 /** Where a person lands after signing in. Only these shapes, so the redirect cannot leave the site. */
-const NEXT_PATH = /^\/(?:account|admin|friend\/[0-9a-f-]{36}\.[A-Za-z0-9_-]{22})?$/;
+const NEXT_PATH = /^\/(?:account|admin(?:\/top)?|friend\/[0-9a-f-]{36}\.[A-Za-z0-9_-]{22})?$/;
 
 function safeNext(raw: string | null): string {
   return raw !== null && NEXT_PATH.test(raw) ? raw : "/";

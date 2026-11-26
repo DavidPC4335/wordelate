@@ -7,6 +7,7 @@ import { scoreForMoves } from "../src/lib/storage.js";
 import type { ScoreEntry } from "../src/lib/storage.js";
 import { mergePuzzles } from "../src/lib/puzzles.js";
 import { handleAdmin, handleSchedule } from "../src/worker/admin.js";
+import type { ArchiveReader } from "../src/worker/top-players.js";
 import { handleAccount } from "../src/worker/account.js";
 import { resetScheduleCache } from "../src/worker/schedule.js";
 import type { AccountDeps } from "../src/worker/account.js";
@@ -1146,5 +1147,123 @@ describe("admins", () => {
     expect(me.account.stats.wins).toBe(1);
     expect((await postAdmin(h, "/api/admin/account", { unlocks: ["nope"] }, boss.cookie)).status).toBe(400);
     expect((await postAdmin(h, "/api/admin/account", { scores: [{ day: "2026-11-19", puzzleId: "x", moves: 4, score: 1 }] }, boss.cookie)).status).toBe(400);
+  });
+
+  describe("top players", () => {
+    function getTop(h: Harness, days: string, cookie: string, archive: ArchiveReader | null = null) {
+      return handleAdmin(
+        new Request(`${HOME}/api/admin/top?days=${days}`, { headers: { cookie, "cf-connecting-ip": "203.0.113.9" } }),
+        h.deps,
+        seed,
+        archive,
+      );
+    }
+
+    function uuid(n: number): string {
+      return `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    }
+
+    function addUser(h: Harness, n: number, name: string, options: { picture?: string | null; showPicture?: boolean } = {}) {
+      h.db
+        .prepare(
+          `INSERT INTO users (id, google_sub, email, full_name, display_name, picture, show_picture, created_at, last_login_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(uuid(n), `sub-${n}`, `secret${n}@example.com`, `${name} Fullname`, name, options.picture ?? null, options.showPicture === false ? 0 : 1, NOW, NOW);
+    }
+
+    function answer(start: string, goal: string, words: string[]) {
+      return { puzzleId: `${start}-${goal}`, start, goal, steps: words.map((word, i) => ({ op: i % 2 ? "+" : "-", word })) };
+    }
+
+    function addScore(h: Harness, n: number, day: string, moves: number, player = n) {
+      h.db
+        .prepare(
+          `INSERT INTO scores (day, player_id, puzzle_id, score, moves, answer_json, name, user_id, picture, created_at)
+           VALUES (?, ?, 'p', ?, ?, ?, NULL, ?, NULL, ?)`,
+        )
+        .run(day, uuid(1000 + player), scoreForMoves(moves), moves, JSON.stringify(answer("king", "queen", Array.from({ length: moves }, (_, i) => `w${"abcdefghijklmnop"[i]}`))), uuid(n), NOW);
+    }
+
+    it("is only for admins and only takes the three windows", async () => {
+      const h = harness();
+      expect((await getTop(h, "7", "")).status).toBe(401);
+      const ada = await login(h, { sub: "ada", email: "ada@example.com" });
+      expect((await getTop(h, "7", ada.cookie)).status).toBe(404);
+      const boss = await login(h, { sub: "boss", email: "daviddev4335@gmail.com" });
+      for (const bad of ["8", "", "abc", "7.0", "-7", "1000"]) expect((await getTop(h, bad, boss.cookie)).status).toBe(400);
+      expect((await getTop(h, "90", boss.cookie)).status).toBe(200);
+      const cross = await handleAdmin(
+        new Request(`${HOME}/api/admin/top?days=7`, { headers: { cookie: boss.cookie, origin: "https://evil.example" } }),
+        h.deps,
+        seed,
+      );
+      expect(cross.status).toBe(403);
+    });
+
+    it("ranks signed-in players by points, with their best day, and shares no ids or emails", async () => {
+      const h = harness();
+      const boss = await login(h, { sub: "boss", email: "daviddev4335@gmail.com" });
+      for (let n = 1; n <= 7; n++) addUser(h, n, `P${n}`, { picture: `https://lh3.googleusercontent.com/a/p${n}`, showPicture: n !== 2 });
+      // P1: two days. P2: one great day. P3..P7: one day each, fewer points.
+      addScore(h, 1, "2026-11-20", 4);
+      addScore(h, 1, "2026-11-19", 6);
+      addScore(h, 2, "2026-11-18", 1);
+      addScore(h, 2, "2026-11-18", 9, 99); // a second browser on the same day; the better one counts
+      for (let n = 3; n <= 7; n++) addScore(h, n, "2026-11-17", n + 2);
+      // Too old for 7 days, still in the database.
+      addScore(h, 7, "2026-11-01", 1);
+      // An anonymous score cannot be ranked.
+      h.db.prepare(`INSERT INTO scores (day, player_id, puzzle_id, score, moves, answer_json, created_at) VALUES ('2026-11-20', ?, 'p', 150, 1, ?, 0)`).run(uuid(5000), JSON.stringify(answer("a", "b", ["c"])));
+
+      const reply = await getTop(h, "7", boss.cookie);
+      expect(reply.status).toBe(200);
+      expect(reply.headers.get("cache-control")).toBe("no-store");
+      const text = await reply.text();
+      const body = JSON.parse(text);
+      expect(body).toMatchObject({ days: 7, from: "2026-11-14", to: "2026-11-20" });
+      expect(body.players.map((player: { name: string }) => player.name)).toEqual(["P1", "P2", "P3", "P4", "P5"]);
+      expect(body.players[0]).toMatchObject({ place: 1, totalPoints: 120 + 100, daysPlayed: 2, picture: "https://lh3.googleusercontent.com/a/p1" });
+      expect(body.players[0].bestDay).toMatchObject({ day: "2026-11-20", score: 120, moves: 4, start: "king", goal: "queen" });
+      expect(body.players[0].bestDay.steps).toHaveLength(4);
+      expect(body.players[1]).toMatchObject({ name: "P2", totalPoints: 150, daysPlayed: 1, picture: null });
+      expect(Object.keys(body.players[0]).sort()).toEqual(["bestDay", "daysPlayed", "name", "picture", "place", "totalPoints"]);
+      expect(text).not.toMatch(/00000000-|@|Fullname|sub-/);
+
+      const month = await (await getTop(h, "30", boss.cookie)).json();
+      expect(month.players.find((player: { name: string }) => player.name === "P7")).toMatchObject({ totalPoints: 150 + 70, daysPlayed: 2 });
+    });
+
+    it("reads older days from the archive and skips deleted accounts", async () => {
+      const h = harness();
+      const boss = await login(h, { sub: "boss", email: "daviddev4335@gmail.com" });
+      addUser(h, 1, "Kept");
+      const asked: string[] = [];
+      const archive: ArchiveReader = {
+        async get(key) {
+          asked.push(key);
+          if (key === "scores/2026-09-01.json") {
+            return JSON.stringify({
+              day: "2026-09-01",
+              scores: [
+                { userId: uuid(1), score: 150, moves: 1, answer: answer("sun", "moon", ["night"]), createdAt: 1 },
+                { userId: uuid(42), score: 150, moves: 1, answer: answer("sun", "moon", ["night"]), createdAt: 1 },
+                { userId: null, score: 150, moves: 1, answer: answer("sun", "moon", ["night"]), createdAt: 1 },
+                { userId: uuid(1), score: 999, moves: 1, answer: answer("x", "y", ["z"]) },
+              ],
+            });
+          }
+          if (key === "scores/2026-09-02.json") return "not json";
+          if (key === "scores/2026-09-03.json") throw new Error("R2 down");
+          return null;
+        },
+      };
+      expect((await (await getTop(h, "7", boss.cookie, archive)).json()).players).toEqual([]);
+      expect(asked).toEqual([]);
+      const body = await (await getTop(h, "90", boss.cookie, archive)).json();
+      expect(asked).toHaveLength(90 - 7);
+      expect(body.players).toHaveLength(1);
+      expect(body.players[0]).toMatchObject({ name: "Kept", totalPoints: 150, bestDay: { day: "2026-09-01", start: "sun", goal: "moon" } });
+    });
   });
 });
