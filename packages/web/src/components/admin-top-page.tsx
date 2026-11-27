@@ -1,13 +1,14 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { adminApi } from "../lib/account-api.js";
 import { TOP_WINDOWS } from "../lib/admin.js";
 import type { TopPlayer, TopPlayersView, TopWindow } from "../lib/admin.js";
 import { shortDay } from "../lib/admin-format.js";
-import { canvasToPng, cardFileName, drawCard, loadPicture, ordinal, saveBlob, windowLabel } from "../lib/top-card.js";
+import { canvasToPng, cardFileName, drawCard, loadPicture, ordinal, saveBlob, windowLabel, withoutHidden } from "../lib/top-card.js";
 import { AppLink, GoogleButton } from "./account-bits.js";
 import { PageFrame } from "./account-page.js";
 
 type Card = { player: TopPlayer; png: Blob; url: string };
+type Drawn = { shown: TopPlayersView; cards: Card[] };
 
 /** Several downloads in a row. A short pause keeps the browser from dropping some. */
 async function saveAll(view: TopPlayersView, cards: readonly Card[]): Promise<void> {
@@ -17,24 +18,17 @@ async function saveAll(view: TopPlayersView, cards: readonly Card[]): Promise<vo
   }
 }
 
-async function makeCards(view: TopPlayersView): Promise<Card[]> {
-  const pictures = await Promise.all(view.players.map((player) => loadPicture(player.picture)));
-  const cards: Card[] = [];
-  for (const [index, player] of view.players.entries()) {
-    const canvas = await drawCard(view, player, pictures[index] ?? null);
-    const png = await canvasToPng(canvas);
-    cards.push({ player, png, url: URL.createObjectURL(png) });
-  }
-  return cards;
-}
-
 export function AdminTopPage() {
   const [days, setDays] = useState<TopWindow>(7);
   const [view, setView] = useState<TopPlayersView | null>(null);
-  const [cards, setCards] = useState<Card[]>([]);
+  /** Original places of the players left out of the cards. */
+  const [hidden, setHidden] = useState<ReadonlySet<number>>(new Set());
+  const [drawn, setDrawn] = useState<Drawn | null>(null);
   const [status, setStatus] = useState<"loading" | "in" | "out" | "denied">("loading");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /** Pictures load once per link, so hiding someone does not fetch them all again. */
+  const pictures = useRef(new Map<string, Promise<HTMLImageElement | null>>());
 
   useEffect(() => {
     const before = document.title;
@@ -48,8 +42,9 @@ export function AdminTopPage() {
     let live = true;
     setStatus((current) => (current === "in" ? current : "loading"));
     setView(null);
+    setHidden(new Set());
     setError(null);
-    void adminApi.topPlayers(days).then(async (reply) => {
+    void adminApi.topPlayers(days).then((reply) => {
       if (!live) return;
       if (!reply.ok) {
         if (reply.status === 401) setStatus("out");
@@ -62,25 +57,53 @@ export function AdminTopPage() {
       }
       setStatus("in");
       setView(reply.value);
-      try {
-        const made = await makeCards(reply.value);
-        if (live) setCards(made);
-        else for (const card of made) URL.revokeObjectURL(card.url);
-      } catch {
-        if (live) setError("The cards could not be drawn in this browser.");
-      }
     });
     return () => {
       live = false;
     };
   }, [days]);
 
+  const shown = useMemo(() => (view ? withoutHidden(view, hidden) : null), [view, hidden]);
+
+  // Draw the cards again whenever the list changes, since every place number is on the image.
+  useEffect(() => {
+    if (!shown) return;
+    let live = true;
+    const picture = (url: string | null) => {
+      if (!url) return Promise.resolve(null);
+      let pending = pictures.current.get(url);
+      if (!pending) {
+        pending = loadPicture(url);
+        pictures.current.set(url, pending);
+      }
+      return pending;
+    };
+    void (async () => {
+      const cards: Card[] = [];
+      try {
+        const images = await Promise.all(shown.players.map((player) => picture(player.picture)));
+        for (const [index, player] of shown.players.entries()) {
+          const png = await canvasToPng(await drawCard(shown, player, images[index] ?? null));
+          cards.push({ player, png, url: URL.createObjectURL(png) });
+          if (!live) break;
+        }
+      } catch {
+        if (live) setError("The cards could not be drawn in this browser.");
+      }
+      if (live) setDrawn({ shown, cards });
+      else for (const card of cards) URL.revokeObjectURL(card.url);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [shown]);
+
   // Let go of the old images when new ones arrive or the page closes.
   useEffect(
     () => () => {
-      for (const card of cards) URL.revokeObjectURL(card.url);
+      for (const card of drawn?.cards ?? []) URL.revokeObjectURL(card.url);
     },
-    [cards],
+    [drawn],
   );
 
   if (status === "loading") {
@@ -112,7 +135,15 @@ export function AdminTopPage() {
     );
   }
 
-  const ready = view !== null && cards.length === view.players.length && cards.every((card, index) => card.player === view.players[index]);
+  const ready = shown !== null && drawn?.shown === shown && drawn.cards.length === shown.players.length;
+  const cards = ready ? drawn.cards : [];
+
+  function toggle(place: number) {
+    const next = new Set(hidden);
+    if (next.has(place)) next.delete(place);
+    else next.add(place);
+    setHidden(next);
+  }
 
   return (
     <PageFrame title="Top players">
@@ -146,40 +177,75 @@ export function AdminTopPage() {
             {shortDay(view.from)} – {shortDay(view.to)} · {view.players.length === 0 ? "nobody yet" : `top ${view.players.length}`}
           </p>
         ) : null}
+        {view && view.players.length > 0 ? (
+          <>
+            <ul class="top-picks" aria-label="Players on the cards">
+              {view.players.map((player) => (
+                <li key={player.place}>
+                  <label class="check">
+                    <input type="checkbox" checked={!hidden.has(player.place)} onChange={() => toggle(player.place)} />
+                    <span>
+                      {player.name} · {player.totalPoints} points
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <p class="card-note">
+              Untick a player to leave them off the cards. The players below move up a place. This only changes this page and resets when you reload it.
+            </p>
+          </>
+        ) : null}
         {error ? (
           <p class="card-note sync-error" role="alert">
             {error}
           </p>
         ) : null}
-        {view && view.players.length > 0 ? (
-          <button type="button" class="btn btn-small" disabled={!ready || saving} onClick={() => {
-            setSaving(true);
-            void saveAll(view, cards).finally(() => setSaving(false));
-          }}>
-            {saving ? "Saving…" : `Download all ${view.players.length} cards`}
+        {shown && shown.players.length > 0 ? (
+          <button
+            type="button"
+            class="btn btn-small"
+            disabled={!ready || saving}
+            onClick={() => {
+              setSaving(true);
+              void saveAll(shown, cards).finally(() => setSaving(false));
+            }}
+          >
+            {saving ? "Saving…" : `Download all ${shown.players.length} ${shown.players.length === 1 ? "card" : "cards"}`}
           </button>
         ) : null}
       </section>
 
       {!view && !error ? <p class="card-text">Loading the rankings…</p> : null}
       {view && view.players.length === 0 ? <p class="card-text">No signed-in player has a score in this window yet.</p> : null}
-      {view && view.players.length > 0 && !ready && !error ? <p class="card-text">Drawing the cards…</p> : null}
+      {view && view.players.length > 0 && shown?.players.length === 0 ? <p class="card-text">Every player is left out. Tick one to show their card.</p> : null}
+      {shown && shown.players.length > 0 && !ready && !error ? <p class="card-text">Drawing the cards…</p> : null}
 
-      {view && ready ? (
+      {shown && ready ? (
         <ol class="top-cards">
-          {cards.map((card) => (
-            <li key={card.player.place} class="top-card">
-              <img
-                src={card.url}
-                width={1080}
-                height={1350}
-                alt={`${ordinal(card.player.place)} place: ${card.player.name}, ${card.player.totalPoints} points`}
-              />
-              <button type="button" class="btn btn-small btn-ghost" onClick={() => saveBlob(card.png, cardFileName(view, card.player))}>
-                Download PNG
-              </button>
-            </li>
-          ))}
+          {cards.map((card, index) => {
+            const original = view?.players.filter((player) => !hidden.has(player.place))[index]?.place;
+            return (
+              <li key={original ?? card.player.place} class="top-card">
+                <img
+                  src={card.url}
+                  width={1080}
+                  height={1350}
+                  alt={`${ordinal(card.player.place)} place: ${card.player.name}, ${card.player.totalPoints} points`}
+                />
+                <div class="card-actions">
+                  <button type="button" class="btn btn-small btn-ghost" onClick={() => saveBlob(card.png, cardFileName(shown, card.player))}>
+                    Download PNG
+                  </button>
+                  {original !== undefined ? (
+                    <button type="button" class="text-button" onClick={() => toggle(original)}>
+                      Remove from list
+                    </button>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
         </ol>
       ) : null}
     </PageFrame>

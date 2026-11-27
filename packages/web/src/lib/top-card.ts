@@ -437,3 +437,12 @@ export function saveBlob(blob: Blob, name: string): void {
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
+
+/**
+ * The ranking without the players left out on this page. Everyone below moves up a place.
+ * Nothing is sent to the server; a reload or another window shows everyone again.
+ */
+export function withoutHidden(view: TopPlayersView, hidden: ReadonlySet<number>): TopPlayersView {
+  const players = view.players.filter((player) => !hidden.has(player.place)).map((player, index) => ({ ...player, place: index + 1 }));
+  return { ...view, players };
+}

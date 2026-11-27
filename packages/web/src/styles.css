@@ -2115,3 +2115,4 @@ button:focus-visible, input:focus-visible, summary:focus-visible, .dot:focus-vis
 .top-cards { display: grid; gap: 1.2rem; margin: 0; padding: 0; list-style: none; }
 .top-card { display: grid; justify-items: center; gap: 0.6rem; }
 .top-card img { width: min(100%, 27rem); height: auto; border-radius: 22px; box-shadow: 0 5px 0 var(--line); }
+.top-picks { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
